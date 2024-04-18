@@ -1,7 +1,7 @@
 import { readFile } from '@web/test-runner-commands';
 import sinon from 'sinon';
 
-import { priceLiteralsURL } from '../../../../libs/blocks/merch/merch.js';
+import { PRICE_LITERALS_URL } from '../../../../libs/blocks/merch/merch.js';
 
 export async function mockFetch() {
   // this path allows to import this mock from tests for other blocks (e.g. commerce)
@@ -11,9 +11,9 @@ export async function mockFetch() {
 
   const { fetch } = window;
 
-  let entitlementsMetadata;
-  const setEntitlementsMetadata = (data) => {
-    entitlementsMetadata = Promise.resolve(data);
+  let checkoutLinkConfigs;
+  const setCheckoutLinkConfigs = (data) => {
+    checkoutLinkConfigs = data === null ? null : Promise.resolve(data);
   };
 
   let subscriptionsData;
@@ -24,7 +24,7 @@ export async function mockFetch() {
   sinon.stub(window, 'fetch').callsFake((...args) => {
     const { href, pathname, searchParams } = new URL(String(args[0]));
     // literals mock
-    if (href === priceLiteralsURL) {
+    if (href === PRICE_LITERALS_URL) {
       return Promise.resolve({
         ok: true,
         json: () => Promise.resolve(literals),
@@ -54,11 +54,14 @@ export async function mockFetch() {
     }
 
     // entitlements data mock
-    if (/entitlements.json/.test(pathname)) {
-      return Promise.resolve(entitlementsMetadata ? {
+    if (/checkout-link.json/.test(pathname)) {
+      if (checkoutLinkConfigs === null) {
+        return Promise.reject(new Error('Error while retrieving checkout-link configs'));
+      }
+      return Promise.resolve(checkoutLinkConfigs ? {
         ok: true,
         status: 200,
-        json: () => entitlementsMetadata,
+        json: () => checkoutLinkConfigs,
       } : { ok: false, status: 404 });
     }
 
@@ -83,7 +86,7 @@ export async function mockFetch() {
     return fetch.apply(window, args);
   });
 
-  return { setEntitlementsMetadata, setSubscriptionsData };
+  return { setCheckoutLinkConfigs, setSubscriptionsData };
 }
 
 export function unmockFetch() {

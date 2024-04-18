@@ -55,7 +55,7 @@ const handleAlloyResponse = (response) => {
   return items
     .map((item) => {
       const content = item?.data?.content;
-      if (!content) return null;
+      if (!content || !(content.manifestLocation || content.manifestContent)) return null;
 
       return {
         manifestPath: content.manifestLocation || content.manifestPath,
@@ -189,8 +189,6 @@ export default async function init({ persEnabled = false, persManifests = [] }) 
       const { preloadManifests, applyPers } = await import('../features/personalization/personalization.js');
       const manifests = preloadManifests({ targetManifests, persManifests });
       await applyPers(manifests);
-    } else {
-      document.body.dataset.mep = 'nopzn|nopzn';
     }
   }
 

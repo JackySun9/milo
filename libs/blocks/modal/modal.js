@@ -9,9 +9,6 @@ const CLOSE_ICON = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="2
     <line x1="8" y1="8" transform="translate(10506 -3397)" fill="none" stroke="#fff" stroke-width="2"/>
   </g>
 </svg>`;
-let isInitialPageLoad = true;
-const MOBILE_MAX = 599;
-const TABLET_MAX = 1199;
 
 export function findDetails(hash, el) {
   const id = hash.replace('#', '');
@@ -31,13 +28,14 @@ export function sendAnalytics(event) {
   });
 }
 
-function closeModal(modal) {
+export function closeModal(modal) {
   const { id } = modal;
   const closeEvent = new Event('milo:modal:closed');
   window.dispatchEvent(closeEvent);
   const localeModal = id?.includes('locale-modal') ? 'localeModal' : 'milo';
   const analyticsEventName = window.location.hash ? window.location.hash.replace('#', '') : localeModal;
   const closeEventAnalytics = new Event(`${analyticsEventName}:modalClose:buttonClose`);
+
   sendAnalytics(closeEventAnalytics);
 
   document.querySelectorAll(`#${id}`).forEach((mod) => {
@@ -92,45 +90,6 @@ async function getPathModal(path, dialog) {
   // eslint-disable-next-line import/no-cycle
   const { default: getFragment } = await import('../fragment/fragment.js');
   await getFragment(block);
-}
-function sendViewportDimensionsToiFrame(source) {
-  const viewportWidth = Math.max(document.documentElement.clientWidth || 0, window.innerWidth || 0);
-  source.postMessage({ mobileMax: MOBILE_MAX, tabletMax: TABLET_MAX, viewportWidth }, '*');
-}
-
-let resizeListenerAdded = false;
-export async function sendViewportDimensionsOnRequest(messageInfo) {
-  if (messageInfo.data === 'viewportWidth') {
-    sendViewportDimensionsToiFrame(messageInfo.source);
-    const { debounce } = await import('../../utils/action.js');
-    if (!resizeListenerAdded) {
-      window.addEventListener('resize', debounce(() => sendViewportDimensionsToiFrame(messageInfo.source), 50));
-      resizeListenerAdded = true;
-    }
-  }
-}
-
-/** For the modal height adjustment to work the following conditions must be met:
- * 1. The modal must have classes 'commerce-frame height-fit-content';
- * 2. The iframe inside must send a postMessage with the contentHeight (a number of px or '100%);
- */
-function adjustModalHeight({ contentHeight, dialogId }) {
-  if (!contentHeight || !dialogId) return;
-  const dialog = document.querySelector(`#${dialogId}`);
-  const iFrameWrapper = dialog?.querySelector('.milo-iframe.modal');
-  if (!iFrameWrapper) return;
-
-  if (contentHeight === '100%') {
-    iFrameWrapper.style.height = contentHeight;
-    dialog.style.height = contentHeight;
-  } else {
-    const verticalMargins = 20;
-    const clientHeight = document.documentElement.clientHeight - verticalMargins;
-    if (clientHeight <= 0) return;
-    const newHeight = contentHeight > clientHeight ? clientHeight : contentHeight;
-    iFrameWrapper.style.height = `${newHeight}px`;
-    dialog.style.height = `${newHeight}px`;
-  }
 }
 
 export async function getModal(details, custom) {
@@ -201,24 +160,26 @@ export async function getModal(details, custom) {
     [...document.querySelectorAll('header, main, footer')]
       .forEach((element) => element.setAttribute('aria-disabled', 'true'));
   }
-  if (dialog.classList.contains('commerce-frame')) {
-    if (isInitialPageLoad) {
-      window.addEventListener('message', (messageInfo) => {
-        if (dialog.classList.contains('height-fit-content')) {
-          adjustModalHeight({ contentHeight: messageInfo?.data?.contentHeight, dialogId: id });
-        }
-        sendViewportDimensionsOnRequest(messageInfo);
-      });
-      isInitialPageLoad = false;
+
+  const iframe = dialog.querySelector('iframe');
+  if (iframe) {
+    if (dialog.classList.contains('commerce-frame')) {
+      const { default: enableCommerceFrameFeatures } = await import('./modal.merch.js');
+      await enableCommerceFrameFeatures({ dialog, iframe });
+    } else {
+      /* Initially iframe height is set to 0% in CSS for the height auto adjustment feature.
+      For modals without the 'commerce-frame' class height auto adjustment is not applicable */
+      iframe.style.height = '100%';
     }
   }
+
   return dialog;
 }
 
 // Deep link-based
 export default function init(el) {
   const { modalHash } = el.dataset;
-  if (window.location.hash === modalHash) {
+  if (window.location.hash === modalHash && !document.querySelector(`div.dialog-modal${modalHash}`)) {
     const details = findDetails(window.location.hash, el);
     if (details) return getModal(details);
   }

@@ -8,6 +8,8 @@ import { replaceText } from '../../features/placeholders.js';
 
 const DIGITS_ONLY = /^\d+$/;
 
+const CLASS_LOADING = 'loading';
+
 const LITERAL_SLOTS = [
   'searchText',
   'filtersText',
@@ -37,7 +39,7 @@ const fail = (el, err = '') => {
 };
 
 /**
- * Removes merch cards from the DOM if they are not meant to be displayed in this merch cards block.
+ * Removes merch cards from the DOM if they are not meant to be displayed for the given filter.
  * @param {*} merchCards merch-cards element
  */
 export function filterMerchCards(merchCards, filtered) {
@@ -111,9 +113,9 @@ async function initMerchCards(config, type, filtered, el, preferences) {
       const preference = preferences[key];
       if (!preference) return;
       preference
-        .forEach(([cardTitle, cardSize], index) => {
-          if (merchCard.title === cardTitle) {
-            filters[key] = { order: index, size: cardSize };
+        .forEach(([sortKey, cardSize], index) => {
+          if (merchCard.name === sortKey || merchCard.title === sortKey) {
+            filters[key] = { order: index + 1, size: cardSize };
           }
         });
     });
@@ -132,23 +134,28 @@ export default async function init(el) {
     return fail(el, 'Missing queryIndexCardPath config');
   }
 
-  const { miloLibs } = getConfig();
-  loadStyle(`${miloLibs}/blocks/merch/merch.css`);
-  loadStyle(`${miloLibs}/blocks/merch-card/merch-card.css`);
+  const { base } = getConfig();
+  const merchStyles = new Promise((resolve) => {
+    loadStyle(`${base}/blocks/merch/merch.css`, resolve);
+  });
+  const merchCardStyles = new Promise((resolve) => {
+    loadStyle(`${base}/blocks/merch-card/merch-card.css`, resolve);
+  });
+  const allStyles = Promise.all([merchStyles, merchCardStyles]);
 
-  const attributes = { filter: 'all' };
+  const attributes = { filter: 'all', class: CLASS_LOADING };
   const settingsEl = el.firstElementChild?.firstElementChild;
 
   const filtered = settingsEl?.firstElementChild?.tagName === 'STRONG';
 
   if (!filtered) {
     await Promise.all([
-      import(`${miloLibs}/features/spectrum-web-components/dist/theme.js`),
-      import(`${miloLibs}/features/spectrum-web-components/dist/button.js`),
-      import(`${miloLibs}/features/spectrum-web-components/dist/search.js`),
-      import(`${miloLibs}/features/spectrum-web-components/dist/overlay.js`),
-      import(`${miloLibs}/features/spectrum-web-components/dist/menu.js`),
-      import(`${miloLibs}/features/spectrum-web-components/dist/popover.js`),
+      import(`${base}/features/spectrum-web-components/dist/theme.js`),
+      import(`${base}/features/spectrum-web-components/dist/button.js`),
+      import(`${base}/features/spectrum-web-components/dist/search.js`),
+      import(`${base}/features/spectrum-web-components/dist/overlay.js`),
+      import(`${base}/features/spectrum-web-components/dist/menu.js`),
+      import(`${base}/features/spectrum-web-components/dist/popover.js`),
     ]);
   }
 
@@ -222,7 +229,7 @@ export default async function init(el) {
   } else if (!merchCards.filtered) {
     merchCards.filtered = 'all';
   }
-  initMerchCards(config, type, attributes.filtered, el, preferences)
+  await initMerchCards(config, type, attributes.filtered, el, preferences)
     .then((async (cardsRoot) => {
       const cards = [...cardsRoot.children];
       const batchSize = 3;
@@ -235,6 +242,9 @@ export default async function init(el) {
         }
         await makePause();
       }
+      merchCards.updateComplete.then(() => {
+        merchCards.classList.remove(CLASS_LOADING);
+      });
       merchCards.displayResult = true;
     }
     ));
@@ -251,6 +261,6 @@ export default async function init(el) {
     }
     el.replaceWith(merchCards);
   }
-
+  await allStyles;
   return merchCards;
 }
