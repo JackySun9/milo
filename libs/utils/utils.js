@@ -656,6 +656,7 @@ export function convertStageLinks({ anchors, config, hostname }) {
     a.href = a.href.replace(a.hostname, domainsMap[matchedDomain] === 'origin'
       ? hostname
       : domainsMap[matchedDomain]);
+    if (/(\.page|\.live).*\.html(?=[?#]|$)/.test(a.href)) a.href = a.href.replace(/\.html(?=[?#]|$)/, '');
   });
 }
 
@@ -1154,7 +1155,7 @@ function decorateMeta() {
   const { origin } = window.location;
   const contents = document.head.querySelectorAll(`[content*=".${SLD}."]`);
   contents.forEach((meta) => {
-    if (meta.getAttribute('property') === 'hlx:proxyUrl') return;
+    if (meta.getAttribute('property') === 'hlx:proxyUrl' || meta.getAttribute('name')?.endsWith('schedule')) return;
     try {
       const url = new URL(meta.content);
       const localizedLink = localizeLink(`${origin}${url.pathname}`);
