@@ -96,7 +96,7 @@ async function captureViewport(viewportName, urls, folderPath, milolibs) {
   return results;
 }
 
-function diffResults(folderPath, allResults) {
+function diffResults(folderPath, allResults, resultsFile) {
   console.log('\n▶ Computing pixel diffs');
   const comparator = getComparator('image/png');
   const diffed = {};
@@ -121,7 +121,7 @@ function diffResults(folderPath, allResults) {
     });
   }
 
-  const resultsPath = `${folderPath}/results.json`;
+  const resultsPath = `${folderPath}/${resultsFile}`;
   fs.writeFileSync(
     validatePath(resultsPath, { forWriting: true }),
     JSON.stringify(diffed, null, 2),
@@ -154,6 +154,13 @@ async function main() {
   console.log(`▶ Site: ${site}  ·  URLs: ${Object.keys(urls).length}  ·  Viewports: ${viewports.join(',')}`);
   console.log(`▶ MILO_LIBS: ${milolibs}`);
 
+  // SHARD_NAME enables parallel-matrix mode: each matrix job writes its
+  // own results-<shard>.json so they don't overwrite each other on S3.
+  // A fan-in merge job later consolidates them into results.json.
+  const shard = process.env.SHARD_NAME;
+  const resultsFile = shard ? `results-${shard}.json` : 'results.json';
+  const timestampType = shard ? `-${shard}` : '';
+
   const folderPath = `${config.baseDir}/${site}`;
   validatePath(`${folderPath}/.touch`, { forWriting: true });
 
@@ -163,11 +170,11 @@ async function main() {
     Object.assign(allResults, vpResults);
   }
 
-  const diffed = diffResults(folderPath, allResults);
+  const diffed = diffResults(folderPath, allResults, resultsFile);
 
   if (config.s3.accessKeyId && config.s3.secretAccessKey) {
     console.log(`\n▶ Uploading to ${config.s3.endpoint}/${config.s3.bucket}/${folderPath}/`);
-    await uploadResultsDir(folderPath);
+    await uploadResultsDir(folderPath, { resultsFile, type: timestampType });
     console.log('✓ Uploaded');
   } else {
     console.log('\n⚠ Skipping S3 upload (S3_ACCESS_KEY_ID / S3_SECRET_ACCESS_KEY not set)');

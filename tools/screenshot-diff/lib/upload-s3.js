@@ -56,15 +56,24 @@ async function uploadFile({
 }
 
 /**
- * Walk a results.json (produced by compare.mjs) and upload each referenced
- * image (a, b, diff) plus the results.json itself and a timestamp file.
- * @param {string} dir - Local folder containing results.json (e.g. screenshots/milo)
- * @param {string} [type] - Suffix added to timestamp filename (default '')
+ * Walk a results-like JSON (produced by compare.mjs or sot.run.js) and
+ * upload each referenced image (a, b, diff) plus the JSON itself and a
+ * timestamp file.
+ *
+ * @param {string} dir - Local folder containing the results file (e.g. screenshots/milo)
+ * @param {object} [opts]
+ * @param {string} [opts.resultsFile='results.json'] - Name of results file
+ *   inside `dir`. Set to e.g. 'results-chrome.json' for per-viewport shards
+ *   used in parallel matrix runs.
+ * @param {string} [opts.type=''] - Suffix added to timestamp filename
+ *   (e.g. '-chrome') so concurrent uploads don't race.
  */
-async function uploadResultsDir(dir, type = '') {
+async function uploadResultsDir(dir, opts = {}) {
+  const resultsFile = opts.resultsFile || 'results.json';
+  const type = opts.type || '';
   const s3 = makeClient();
   const s3Path = '.';
-  const resultsPath = path.join(dir, 'results.json');
+  const resultsPath = path.join(dir, resultsFile);
   const entries = JSON.parse(fs.readFileSync(validatePath(resultsPath)));
 
   const tasks = [];
@@ -120,11 +129,12 @@ async function uploadResultsDir(dir, type = '') {
 
 module.exports = { uploadFile, uploadResultsDir };
 
-// CLI entry: `node upload-s3.js screenshots/milo`
+// CLI entry: `node upload-s3.js screenshots/milo [resultsFileName] [timestampType]`
 if (require.main === module) {
   const dir = process.argv[2] || `${config.baseDir}/milo`;
-  const type = process.argv[3] || '';
-  uploadResultsDir(dir, type).catch((err) => {
+  const resultsFile = process.argv[3] || 'results.json';
+  const type = process.argv[4] || '';
+  uploadResultsDir(dir, { resultsFile, type }).catch((err) => {
     console.error(err);
     process.exit(1);
   });
