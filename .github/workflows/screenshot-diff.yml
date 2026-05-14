@@ -42,10 +42,6 @@ jobs:
     runs-on: [self-hosted, macOS, screendiff]
     timeout-minutes: 15
 
-    defaults:
-      run:
-        working-directory: tools/screenshot-diff
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -55,10 +51,9 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
-          cache-dependency-path: tools/screenshot-diff/package-lock.json
 
-      - name: Install tool dependencies
-        run: npm ci || npm install
+      - name: Install milo dependencies
+        run: npm ci
 
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium webkit
@@ -75,12 +70,12 @@ jobs:
           S3_REGION: ${{ vars.SCREENSHOT_S3_REGION || 'us-west-1' }}
           S3_ENDPOINT: ${{ vars.SCREENSHOT_S3_ENDPOINT || 'https://s3-sj3.corp.adobe.com' }}
           S3_BUCKET: ${{ vars.SCREENSHOT_S3_BUCKET || 'milo' }}
-        run: node run.js
+        run: node tools/screenshot-diff/run.js
 
       - name: Upload artifacts (also kept on S3)
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: screenshot-diff-${{ inputs.project }}-${{ inputs.viewport }}
-          path: tools/screenshot-diff/screenshots/${{ inputs.project }}/
+          path: screenshots/${{ inputs.project }}/
           retention-days: 7

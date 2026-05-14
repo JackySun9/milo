@@ -49,14 +49,11 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
-          cache-dependency-path: tools/screenshot-diff/package-lock.json
 
-      - name: Install tool dependencies
-        working-directory: tools/screenshot-diff
+      - name: Install milo dependencies
         run: npm ci
 
       - name: Install Playwright browsers
-        working-directory: tools/screenshot-diff
         run: npx playwright install --with-deps chromium webkit
 
       - name: Run visual diff
