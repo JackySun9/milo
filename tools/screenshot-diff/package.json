@@ -1,0 +1,21 @@
+{
+  "name": "@milo/screenshot-diff",
+  "version": "0.1.0",
+  "description": "Visual regression tool: capture two URLs, compute pixel diff, upload to S3.",
+  "private": true,
+  "scripts": {
+    "run": "node run.js",
+    "merge": "node lib/merge.js",
+    "compare": "node lib/compare.mjs",
+    "upload": "node lib/upload-s3.js"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.996.0",
+    "axios": "^1.13.5",
+    "playwright": "^1.57.0",
+    "playwright-core": "^1.57.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
