@@ -70,8 +70,8 @@ jobs:
           PROJECT: ${{ inputs.project }}
           VIEWPORT: ${{ inputs.viewport }}
           FULL_PAGE: ${{ inputs.full_page }}
-          S3_ACCESS_KEY_ID: ${{ secrets.SCREENSHOT_S3_ACCESS_KEY_ID }}
-          S3_SECRET_ACCESS_KEY: ${{ secrets.SCREENSHOT_S3_SECRET_ACCESS_KEY }}
+          S3_ACCESS_KEY_ID: ${{ secrets.S3ACCESSKEY }}
+          S3_SECRET_ACCESS_KEY: ${{ secrets.S3SECRETKEY }}
           S3_REGION: ${{ vars.SCREENSHOT_S3_REGION || 'us-west-1' }}
           S3_ENDPOINT: ${{ vars.SCREENSHOT_S3_ENDPOINT || 'https://s3-sj3.corp.adobe.com' }}
           S3_BUCKET: ${{ vars.SCREENSHOT_S3_BUCKET || 'milo' }}
