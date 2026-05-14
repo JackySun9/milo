@@ -1,0 +1,93 @@
+name: Screenshot Diff (Nala Categories)
+
+# Automates nala's runScreenDiff.sh — captures one URL twice (with and
+# without ?milolibs=stage) for every entry in the category's data file,
+# pixel-diffs, and uploads to internal S3.
+#
+# Triggers a category-wide visual regression run; intended for stage→main
+# PR checks and other periodic batch comparisons.
+#
+# View results at:
+#   http://nala-auto.corp.adobe.com/imagediff/<category>
+#
+# Runs on the self-hosted Mac Mini pool (same pool as screenshot-diff.yml).
+
+on:
+  workflow_dispatch:
+    inputs:
+      category:
+        description: 'Site category from nala'
+        required: true
+        default: 'bacom'
+        type: choice
+        options:
+          - bacom
+          - bacom-blog
+          - milo
+          - caas
+          - feds
+          - uar
+          - uar-ai
+          - express
+          - graybox-homepage
+          - graybox-dc
+          - graybox-cc
+          - graybox-bacom
+      projects:
+        description: 'Playwright projects (comma-separated viewports)'
+        required: false
+        default: 'chrome,ipad,iphone'
+        type: string
+      nala_ref:
+        description: 'nala branch/tag/SHA to use (default: main)'
+        required: false
+        default: 'main'
+        type: string
+
+jobs:
+  diff:
+    name: ${{ inputs.category }} · ${{ inputs.projects }}
+    runs-on: [self-hosted, macOS, screendiff]
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout adobecom/nala
+        uses: actions/checkout@v4
+        with:
+          repository: adobecom/nala
+          ref: ${{ inputs.nala_ref }}
+          path: nala
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install nala dependencies
+        working-directory: nala
+        run: npm ci
+
+      - name: Install Playwright browsers
+        working-directory: nala
+        run: npx playwright install --with-deps chromium webkit
+
+      - name: Run runScreenDiff.sh
+        working-directory: nala
+        env:
+          # nala's uploads3.js reads these lowercase env vars (legacy naming)
+          s3accesskey: ${{ secrets.S3ACCESSKEY }}
+          s3secretkey: ${{ secrets.S3SECRETKEY }}
+        run: bash runScreenDiff.sh ${{ inputs.category }} visual ${{ inputs.projects }}
+
+      - name: Upload artifacts to GitHub (in addition to S3)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshot-diff-${{ inputs.category }}
+          path: nala/screenshots/${{ inputs.category }}/
+          retention-days: 7
+
+      - name: Print result URL
+        if: success()
+        run: |
+          echo "::notice title=View results::http://nala-auto.corp.adobe.com/imagediff/${{ inputs.category }}"
