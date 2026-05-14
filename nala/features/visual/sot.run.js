@@ -44,6 +44,27 @@ const VIEWPORTS = {
   iphone: { engine: webkit, device: 'iPhone X', viewport: null },
 };
 
+/**
+ * Wait until the page is "settled" before taking the screenshot.
+ *
+ * Strategy (any of these is enough):
+ *   1. footer link `.feds-footer-privacyLink` is visible (nala convention —
+ *      indicates the FEDS chrome rendered all the way to the bottom)
+ *   2. network is idle for 500ms (Playwright `networkidle`)
+ *   3. timeout (don't block forever)
+ *
+ * Without this hook many AEM pages screenshot blank because the initial
+ * HTML is empty and the content streams in async via JS.
+ */
+async function waitForPageReady(page) {
+  await Promise.race([
+    page.locator('.feds-footer-privacyLink').waitFor({ state: 'visible', timeout: 20_000 }).catch(() => {}),
+    page.waitForLoadState('networkidle', { timeout: 20_000 }).catch(() => {}),
+  ]);
+  // Small extra settle for lazy-loaded images/fonts.
+  await page.waitForTimeout(500);
+}
+
 async function captureViewport(viewportName, urls, folderPath, milolibs) {
   const preset = VIEWPORTS[viewportName];
   console.log(`\n▶ Viewport: ${viewportName} (${preset.device})`);
@@ -60,8 +81,8 @@ async function captureViewport(viewportName, urls, folderPath, milolibs) {
     try {
       const result = await takeTwo(
         page,
-        url, null,
-        url + milolibs, null,
+        url, () => waitForPageReady(page),
+        url + milolibs, () => waitForPageReady(page),
         folderPath, name,
         { fullPage: true },
       );
@@ -142,7 +163,7 @@ async function main() {
     Object.assign(allResults, vpResults);
   }
 
-  diffResults(folderPath, allResults);
+  const diffed = diffResults(folderPath, allResults);
 
   if (config.s3.accessKeyId && config.s3.secretAccessKey) {
     console.log(`\n▶ Uploading to ${config.s3.endpoint}/${config.s3.bucket}/${folderPath}/`);
@@ -152,8 +173,8 @@ async function main() {
     console.log('\n⚠ Skipping S3 upload (S3_ACCESS_KEY_ID / S3_SECRET_ACCESS_KEY not set)');
   }
 
-  const diffCount = Object.values(allResults).flat().filter((e) => e.diff).length;
-  console.log(`\n✓ Done.  Captures: ${Object.keys(allResults).length}  ·  With diffs: ${diffCount}`);
+  const diffCount = Object.values(diffed).flat().filter((e) => e.diff).length;
+  console.log(`\n✓ Done.  Captures: ${Object.keys(diffed).length}  ·  With diffs: ${diffCount}`);
 }
 
 main().catch((err) => {
