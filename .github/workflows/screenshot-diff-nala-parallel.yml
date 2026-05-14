@@ -1,0 +1,124 @@
+name: Screenshot Diff (Parallel Matrix)
+
+# Same as screenshot-diff-nala.yml but runs each viewport on its own
+# self-hosted Mac Mini in parallel, then fans in via a merge job.
+#
+# Capture jobs each write their own results-<viewport>.json shard to S3
+# (so they don't overwrite each other); the merge job downloads all shards
+# and consolidates them into a single results.json that nala-auto reads.
+#
+# Result URL after completion:
+#   http://nala-auto.corp.adobe.com/imagediff/<site>
+
+on:
+  workflow_dispatch:
+    inputs:
+      site:
+        description: 'Site (matches nala/features/visual/sot.<site>.yml)'
+        required: true
+        default: 'bacom'
+        type: choice
+        options:
+          - bacom
+      milo_libs:
+        description: 'Query string appended to URL B (the candidate)'
+        required: false
+        default: '?milolibs=stage'
+        type: string
+
+jobs:
+  capture:
+    name: capture-${{ matrix.viewport }}
+    strategy:
+      fail-fast: false  # don't kill ipad/iphone if chrome fails
+      matrix:
+        viewport: [chrome, ipad, iphone]
+    runs-on: [self-hosted, macOS, screendiff]
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install milo dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium webkit
+
+      - name: Run visual diff (this viewport only)
+        env:
+          SITE: ${{ inputs.site }}
+          VIEWPORTS: ${{ matrix.viewport }}
+          SHARD_NAME: ${{ matrix.viewport }}
+          MILO_LIBS: ${{ inputs.milo_libs }}
+          S3_ACCESS_KEY_ID: ${{ secrets.S3ACCESSKEY }}
+          S3_SECRET_ACCESS_KEY: ${{ secrets.S3SECRETKEY }}
+        run: node nala/features/visual/sot.run.js
+
+      - name: Upload shard JSON to GH artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: results-${{ inputs.site }}-${{ matrix.viewport }}
+          path: screenshots/${{ inputs.site }}/results-${{ matrix.viewport }}.json
+          retention-days: 7
+
+  merge:
+    name: merge & publish
+    needs: capture
+    if: always()  # merge whatever shards we have, even if one viewport failed
+    runs-on: [self-hosted, macOS, screendiff]
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install milo dependencies
+        run: npm ci
+
+      - name: Pull shard JSONs from S3 (via nala-auto proxy)
+        run: |
+          mkdir -p screenshots/${{ inputs.site }}
+          for vp in chrome ipad iphone; do
+            url="http://nala-auto.corp.adobe.com/api/milo/screenshots/${{ inputs.site }}/results-$vp.json"
+            if curl -sSf -o "screenshots/${{ inputs.site }}/results-$vp.json" "$url"; then
+              echo "✓ Pulled $vp shard"
+            else
+              echo "⚠ No shard for $vp (capture job may have failed)"
+            fi
+          done
+
+      - name: Merge shards into results.json
+        run: node tools/screenshot-diff/lib/merge.js screenshots/${{ inputs.site }}
+
+      - name: Upload merged results.json to S3
+        env:
+          S3_ACCESS_KEY_ID: ${{ secrets.S3ACCESSKEY }}
+          S3_SECRET_ACCESS_KEY: ${{ secrets.S3SECRETKEY }}
+        run: node tools/screenshot-diff/lib/upload-one.js screenshots/${{ inputs.site }}/results.json
+
+      - name: Write fresh timestamp + upload
+        env:
+          S3_ACCESS_KEY_ID: ${{ secrets.S3ACCESSKEY }}
+          S3_SECRET_ACCESS_KEY: ${{ secrets.S3SECRETKEY }}
+        run: |
+          node -e "require('fs').writeFileSync('screenshots/${{ inputs.site }}/timestamp.json', JSON.stringify([new Date().toLocaleString()], null, 2))"
+          node tools/screenshot-diff/lib/upload-one.js screenshots/${{ inputs.site }}/timestamp.json
+
+      - name: Print result URL
+        run: |
+          echo "::notice title=View results::http://nala-auto.corp.adobe.com/imagediff/${{ inputs.site }}"
