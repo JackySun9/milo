@@ -47,22 +47,17 @@ const VIEWPORTS = {
 /**
  * Wait until the page is "settled" before taking the screenshot.
  *
- * Strategy (any of these is enough):
- *   1. footer link `.feds-footer-privacyLink` is visible (nala convention —
- *      indicates the FEDS chrome rendered all the way to the bottom)
- *   2. network is idle for 500ms (Playwright `networkidle`)
- *   3. timeout (don't block forever)
+ * Mirrors nala's convention (selectors/visual/visual.page.js): the FEDS
+ * footer's privacy link is the last thing to render on adobe.com pages, so
+ * its visibility is a reliable "page is done" signal.
  *
- * Without this hook many AEM pages screenshot blank because the initial
- * HTML is empty and the content streams in async via JS.
+ * Catch swallows the timeout — non-FEDS pages (rare) just proceed after
+ * 30 s rather than crashing the whole run.
  */
 async function waitForPageReady(page) {
-  await Promise.race([
-    page.locator('.feds-footer-privacyLink').waitFor({ state: 'visible', timeout: 20_000 }).catch(() => {}),
-    page.waitForLoadState('networkidle', { timeout: 20_000 }).catch(() => {}),
-  ]);
-  // Small extra settle for lazy-loaded images/fonts.
-  await page.waitForTimeout(500);
+  await page.locator('.feds-footer-privacyLink').first()
+    .waitFor({ state: 'visible', timeout: 30_000 })
+    .catch(() => {});
 }
 
 async function captureViewport(viewportName, urls, folderPath, milolibs) {
