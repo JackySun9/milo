@@ -12,8 +12,9 @@
   "dependencies": {
     "@aws-sdk/client-s3": "^3.996.0",
     "axios": "^1.13.5",
-    "playwright": "^1.57.0",
-    "playwright-core": "^1.57.0"
+    "js-yaml": "^4.1.0",
+    "playwright": "1.46.1",
+    "playwright-core": "1.46.1"
   },
   "engines": {
     "node": ">=20"
