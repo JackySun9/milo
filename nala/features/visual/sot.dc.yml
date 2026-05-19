@@ -1,21 +1,10 @@
 # Imported from adobecom/nala/data/dc/sot-basic.yml
-# Comparison: production (a) vs stage (b) — same path, different host
+# Mode: milolibs (URL vs URL+?milolibs=stage)
+# URLs converted from stage → prod (the milolibs param toggles milo lib version)
 
-Homepage:
-  a: 'https://www.adobe.com/documentcloud.html'
-  b: 'https://www.stage.adobe.com/documentcloud.html'
-AcrobatPro:
-  a: 'https://www.adobe.com/acrobat/business/acrobat-pro.html'
-  b: 'https://www.stage.adobe.com/acrobat/business/acrobat-pro.html'
-Pricing:
-  a: 'https://www.adobe.com/acrobat/pricing.html'
-  b: 'https://www.stage.adobe.com/acrobat/pricing.html'
-PricingBusiness:
-  a: 'https://www.adobe.com/acrobat/pricing/business.html'
-  b: 'https://www.stage.adobe.com/acrobat/pricing/business.html'
-Word2PDF:
-  a: 'https://www.adobe.com/acrobat/online/word-to-pdf.html'
-  b: 'https://www.stage.adobe.com/acrobat/online/word-to-pdf.html'
-AIChatPDF:
-  a: 'https://www.adobe.com/acrobat/online/ai-chat-pdf.html'
-  b: 'https://www.stage.adobe.com/acrobat/online/ai-chat-pdf.html'
+Homepage: 'https://www.adobe.com/documentcloud.html'
+AcrobatPro: 'https://www.adobe.com/acrobat/business/acrobat-pro.html'
+Pricing: 'https://www.adobe.com/acrobat/pricing.html'
+PricingBusiness: 'https://www.adobe.com/acrobat/pricing/business.html'
+Word2PDF: 'https://www.adobe.com/acrobat/online/word-to-pdf.html'
+AIChatPDF: 'https://www.adobe.com/acrobat/online/ai-chat-pdf.html'
