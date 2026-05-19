@@ -26,7 +26,7 @@
  */
 
 // eslint-disable-next-line import/no-extraneous-dependencies
-const { chromium, webkit, devices } = require('playwright');
+const { chromium, devices } = require('playwright');
 // eslint-disable-next-line import/no-extraneous-dependencies
 const { getComparator } = require('playwright-core/lib/utils');
 // eslint-disable-next-line import/no-extraneous-dependencies
@@ -38,10 +38,16 @@ const { validatePath } = require('../../../tools/screenshot-diff/lib/utils.js');
 const { uploadResultsDir } = require('../../../tools/screenshot-diff/lib/upload-s3.js');
 const config = require('../../../tools/screenshot-diff/lib/config.js');
 
+// All viewports run on Chromium. We still apply Playwright's iPad / iPhone
+// `devices` preset (UA, viewport, isMobile, hasTouch, devicePixelRatio) so
+// the page sees a mobile/tablet client and serves the right responsive
+// layout — we just don't pay the WebKit engine's startup + per-capture
+// overhead. BACOM team has run regression this way for 1+ year without
+// missing real Safari-only bugs in practice.
 const VIEWPORTS = {
   chrome: { engine: chromium, device: 'Desktop Chrome', viewport: { width: 1920, height: 1080 } },
-  ipad: { engine: webkit, device: 'iPad Mini', viewport: null },
-  iphone: { engine: webkit, device: 'iPhone X', viewport: null },
+  ipad: { engine: chromium, device: 'iPad Mini', viewport: null },
+  iphone: { engine: chromium, device: 'iPhone X', viewport: null },
 };
 
 /**

@@ -19,7 +19,7 @@
  */
 
 // eslint-disable-next-line import/no-extraneous-dependencies
-const { chromium, webkit, devices } = require('playwright');
+const { chromium, devices } = require('playwright');
 // eslint-disable-next-line import/no-extraneous-dependencies
 const { getComparator } = require('playwright-core/lib/utils');
 const fs = require('fs');
@@ -28,10 +28,13 @@ const { validatePath } = require('./lib/utils.js');
 const { uploadResultsDir } = require('./lib/upload-s3.js');
 const config = require('./lib/config.js');
 
+// All viewports run on Chromium with Playwright's iPad/iPhone device
+// presets (viewport, UA, isMobile, hasTouch, deviceScaleFactor). See
+// nala/features/visual/sot.run.js for rationale.
 const VIEWPORTS = {
   chrome: { engine: chromium, device: 'Desktop Chrome', viewport: { width: 1920, height: 1080 } },
-  ipad: { engine: webkit, device: 'iPad Mini', viewport: null },
-  iphone: { engine: webkit, device: 'iPhone X', viewport: null },
+  ipad: { engine: chromium, device: 'iPad Mini', viewport: null },
+  iphone: { engine: chromium, device: 'iPhone X', viewport: null },
 };
 
 async function run() {
