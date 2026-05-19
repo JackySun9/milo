@@ -1,13 +1,50 @@
----
-# POC One
-'pocone-customer-success-stories': 'https://dapocone--main--da-bacom--adobecom.aem.reviews/customer-success-stories/customer-success-stories'
-'pocone-doc-with-fragment': 'https://dapocone--main--da-bacom--adobecom.aem.reviews/customer-success-stories/doc-with-fragment'
-'pocone-drafts-content-page1': 'https://dapocone--main--da-bacom--adobecom.aem.reviews/customer-success-stories/drafts/content/page1'
-'pocone-drafts-content-page2': 'https://dapocone--main--da-bacom--adobecom.aem.reviews/customer-success-stories/drafts/content/page2'
-'pocone-drafts-page1': 'https://dapocone--main--da-bacom--adobecom.aem.reviews/customer-success-stories/drafts/page1'
-'pocone-drafts-page2': 'https://dapocone--main--da-bacom--adobecom.aem.reviews/customer-success-stories/drafts/page2'
-# POC Two
-'poctwo-customer-success-stories': 'https://dapoctwo--main--da-bacom--adobecom.aem.reviews/customer-success-stories/customer-success-stories'
-'poctwo-doc-with-fragment': 'https://dapoctwo--main--da-bacom--adobecom.aem.reviews/customer-success-stories/doc-with-fragment'
-'poctwo-drafts-content-page1': 'https://dapoctwo--main--da-bacom--adobecom.aem.reviews/customer-success-stories/drafts/content/page1'
-'poctwo-drafts-content-page2': 'https://dapoctwo--main--da-bacom--adobecom.aem.reviews/customer-success-stories/drafts/content/page2'
+# Graybox PoC visual regression
+# Compares the aem.reviews preview source (a) against the
+# business-graybox.adobe.com publish target (b) — i.e. "did what we
+# previewed actually publish to graybox correctly?"
+#
+# Pattern:
+#   a: https://<subdomain>--main--da-bacom--adobecom.aem.reviews/<path>
+#   b: https://<subdomain>.business-graybox.adobe.com/<path>.html
+
+# POC One (dapocone)
+'pocone-customer-success-stories':
+  a: 'https://dapocone--main--da-bacom--adobecom.aem.reviews/customer-success-stories/customer-success-stories'
+  b: 'https://dapocone.business-graybox.adobe.com/customer-success-stories/customer-success-stories.html'
+
+'pocone-doc-with-fragment':
+  a: 'https://dapocone--main--da-bacom--adobecom.aem.reviews/customer-success-stories/doc-with-fragment'
+  b: 'https://dapocone.business-graybox.adobe.com/customer-success-stories/doc-with-fragment.html'
+
+'pocone-drafts-content-page1':
+  a: 'https://dapocone--main--da-bacom--adobecom.aem.reviews/customer-success-stories/drafts/content/page1'
+  b: 'https://dapocone.business-graybox.adobe.com/customer-success-stories/drafts/content/page1.html'
+
+'pocone-drafts-content-page2':
+  a: 'https://dapocone--main--da-bacom--adobecom.aem.reviews/customer-success-stories/drafts/content/page2'
+  b: 'https://dapocone.business-graybox.adobe.com/customer-success-stories/drafts/content/page2.html'
+
+'pocone-drafts-page1':
+  a: 'https://dapocone--main--da-bacom--adobecom.aem.reviews/customer-success-stories/drafts/page1'
+  b: 'https://dapocone.business-graybox.adobe.com/customer-success-stories/drafts/page1.html'
+
+'pocone-drafts-page2':
+  a: 'https://dapocone--main--da-bacom--adobecom.aem.reviews/customer-success-stories/drafts/page2'
+  b: 'https://dapocone.business-graybox.adobe.com/customer-success-stories/drafts/page2.html'
+
+# POC Two (dapoctwo)
+'poctwo-customer-success-stories':
+  a: 'https://dapoctwo--main--da-bacom--adobecom.aem.reviews/customer-success-stories/customer-success-stories'
+  b: 'https://dapoctwo.business-graybox.adobe.com/customer-success-stories/customer-success-stories.html'
+
+'poctwo-doc-with-fragment':
+  a: 'https://dapoctwo--main--da-bacom--adobecom.aem.reviews/customer-success-stories/doc-with-fragment'
+  b: 'https://dapoctwo.business-graybox.adobe.com/customer-success-stories/doc-with-fragment.html'
+
+'poctwo-drafts-content-page1':
+  a: 'https://dapoctwo--main--da-bacom--adobecom.aem.reviews/customer-success-stories/drafts/content/page1'
+  b: 'https://dapoctwo.business-graybox.adobe.com/customer-success-stories/drafts/content/page1.html'
+
+'poctwo-drafts-content-page2':
+  a: 'https://dapoctwo--main--da-bacom--adobecom.aem.reviews/customer-success-stories/drafts/content/page2'
+  b: 'https://dapoctwo.business-graybox.adobe.com/customer-success-stories/drafts/content/page2.html'

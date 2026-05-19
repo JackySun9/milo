@@ -88,14 +88,20 @@ async function captureViewport(viewportName, urls, folderPath, milolibs) {
   const page = await context.newPage();
 
   const results = {};
-  for (const [key, url] of Object.entries(urls)) {
+  for (const [key, value] of Object.entries(urls)) {
+    // Two yaml formats:
+    //   1. `key: 'https://url'`           → milolibs mode (A = url, B = url + MILO_LIBS)
+    //   2. `key: { a: 'https://...', b: 'https://...' }` → explicit pair mode
+    //      (e.g. graybox: aem.reviews preview vs business-graybox publish)
+    const urlA = typeof value === 'string' ? value : value.a;
+    const urlB = typeof value === 'string' ? value + milolibs : value.b;
     const name = `${key}-${viewportName}`;
-    console.log(`  [${name}] ${url}`);
+    console.log(`  [${name}] ${urlA}  vs  ${urlB}`);
     try {
       const result = await takeTwo(
         page,
-        url, () => waitForPageReady(page),
-        url + milolibs, () => waitForPageReady(page),
+        urlA, () => waitForPageReady(page),
+        urlB, () => waitForPageReady(page),
         folderPath, name,
         { fullPage: true },
       );
