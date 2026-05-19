@@ -17,12 +17,10 @@ on:
   workflow_dispatch:
     inputs:
       site:
-        description: 'Site (matches nala/features/visual/sot.<site>.yml)'
+        description: 'Site (matches nala/features/visual/sot.<site>.yml — e.g. bacom, graybox-poc)'
         required: true
         default: 'bacom'
-        type: choice
-        options:
-          - bacom
+        type: string
       viewports:
         description: 'Viewports (comma-separated)'
         required: false
