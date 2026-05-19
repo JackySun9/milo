@@ -62,17 +62,39 @@ const COMPARE_OPTS = {
 /**
  * Wait until the page is "settled" before taking the screenshot.
  *
- * Mirrors nala's convention (selectors/visual/visual.page.js): the FEDS
- * footer's privacy link is the last thing to render on adobe.com pages, so
- * its visibility is a reliable "page is done" signal.
+ * Three phases:
+ *   1. FEDS footer visible — top-to-bottom layout rendered.
+ *   2. Slow scroll bottom→top — triggers Intersection-Observer-based
+ *      lazy loads (customer story cards, data feeds, hero images that
+ *      hydrate on scroll-into-view).
+ *   3. networkidle — any AJAX kicked off by step 2 has settled.
  *
- * Catch swallows the timeout — non-FEDS pages (rare) just proceed after
- * 30 s rather than crashing the whole run.
+ * Without step 2 the screenshot captures loading spinners where
+ * lazy-loaded sections should be.
  */
 async function waitForPageReady(page) {
+  // 1. Wait for FEDS footer
   await page.locator('.feds-footer-privacyLink').first()
-    .waitFor({ state: 'visible', timeout: 30_000 })
+    .waitFor({ state: 'visible', timeout: 20_000 })
     .catch(() => {});
+
+  // 2. Scroll dance to wake up Intersection Observers
+  await page.evaluate(async () => {
+    const step = 600;
+    const delay = 100;
+    let y = 0;
+    const max = document.body.scrollHeight;
+    while (y < max) {
+      window.scrollTo(0, y);
+      // eslint-disable-next-line no-await-in-loop
+      await new Promise((r) => setTimeout(r, delay));
+      y += step;
+    }
+    window.scrollTo(0, 0);
+  });
+
+  // 3. Wait for any lazy-fetch network activity to settle
+  await page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {});
 }
 
 async function captureViewport(viewportName, urls, folderPath, milolibs) {
