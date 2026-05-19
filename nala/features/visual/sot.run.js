@@ -50,6 +50,15 @@ const VIEWPORTS = {
   iphone: { engine: chromium, device: 'iPhone X', viewport: null },
 };
 
+// Pixel comparator tolerance — matches nala/configs/visual.config.js
+// (toHaveScreenshot.maxDiffPixelRatio: 0.2). Without these the comparator
+// flags any single-pixel anti-aliasing variance as a diff, drowning real
+// layout changes in noise.
+const COMPARE_OPTS = {
+  threshold: 0.2,           // per-pixel color tolerance (0 = strict, 1 = anything goes)
+  maxDiffPixelRatio: 0.01,  // page-level: less than 1% pixels differ → not a diff
+};
+
 /**
  * Wait until the page is "settled" before taking the screenshot.
  *
@@ -72,6 +81,9 @@ async function captureViewport(viewportName, urls, folderPath, milolibs) {
   const browser = await preset.engine.launch();
   const ctxOpts = devices[preset.device] ? { ...devices[preset.device] } : {};
   if (preset.viewport) ctxOpts.viewport = preset.viewport;
+  // Honor prefers-reduced-motion so CSS animations / transitions don't
+  // make the pixel diff race the carousel frame.
+  ctxOpts.reducedMotion = 'reduce';
   const context = await browser.newContext(ctxOpts);
   const page = await context.newPage();
 
@@ -108,7 +120,7 @@ function diffResults(folderPath, allResults, resultsFile) {
       try {
         const a = fs.readFileSync(validatePath(entry.a));
         const b = fs.readFileSync(validatePath(entry.b));
-        const diff = comparator(a, b);
+        const diff = comparator(a, b, COMPARE_OPTS);
         if (diff) {
           const diffName = entry.b.replace('.png', '-diff.png');
           fs.writeFileSync(validatePath(diffName, { forWriting: true }), diff.diff);

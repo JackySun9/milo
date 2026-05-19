@@ -96,7 +96,12 @@ async function main() {
       result.urls = entry.urls;
 
       const comparator = getComparator('image/png');
-      const diffImage = comparator(baseImage, currImage);
+      // Match nala's visual.config.js tolerance — suppress single-pixel
+      // anti-aliasing noise that drowns real layout changes.
+      const diffImage = comparator(baseImage, currImage, {
+        threshold: 0.2,
+        maxDiffPixelRatio: 0.01,
+      });
 
       if (diffImage) {
         const diffName = `${entry.b}`.replace('.png', '-diff.png');

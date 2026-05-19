@@ -55,6 +55,10 @@ function validatePath(filePath, options = { allowDirectory: false, forWriting: f
  * @param {Array<{a: string, urls: string}>} betaArray
  * @returns {Array<{order: number, a: string, b: string, diff?: string, urls: string}>}
  */
+// Match nala's visual.config.js tolerance — ignore <1% page-level diff and
+// allow per-pixel anti-aliasing variance to suppress font/subpixel noise.
+const COMPARE_OPTS = { threshold: 0.2, maxDiffPixelRatio: 0.01 };
+
 function compareScreenshots(stableArray, betaArray) {
   const results = [];
   const comparator = getComparator('image/png');
@@ -69,7 +73,7 @@ function compareScreenshots(stableArray, betaArray) {
       urls.push(betaArray[i].urls);
       const stableImage = fs.readFileSync(validatePath(`${stableArray[i].a}`));
       const betaImage = fs.readFileSync(validatePath(`${betaArray[i].a}`));
-      const diffImage = comparator(stableImage, betaImage);
+      const diffImage = comparator(stableImage, betaImage, COMPARE_OPTS);
 
       if (diffImage) {
         result.diff = `${stableArray[i].a}-diff.png`;

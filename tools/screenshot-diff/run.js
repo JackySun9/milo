@@ -65,6 +65,9 @@ async function run() {
   const browser = await preset.engine.launch();
   const contextOptions = devices[preset.device] ? { ...devices[preset.device] } : {};
   if (preset.viewport) contextOptions.viewport = preset.viewport;
+  // prefers-reduced-motion stops CSS animations / carousels from frame-
+  // racing the screenshot capture.
+  contextOptions.reducedMotion = 'reduce';
   const context = await browser.newContext(contextOptions);
   const page = await context.newPage();
 
@@ -82,12 +85,12 @@ async function run() {
 
   await browser.close();
 
-  // Pixel diff
+  // Pixel diff (with nala-matching tolerances to skip anti-aliasing noise)
   console.log('▶ Comparing pixels');
   const comparator = getComparator('image/png');
   const aBuf = fs.readFileSync(validatePath(result.a));
   const bBuf = fs.readFileSync(validatePath(result.b));
-  const diffImage = comparator(aBuf, bBuf);
+  const diffImage = comparator(aBuf, bBuf, { threshold: 0.2, maxDiffPixelRatio: 0.01 });
 
   if (diffImage) {
     const diffPath = `${folderPath}/shot-diff.png`;
