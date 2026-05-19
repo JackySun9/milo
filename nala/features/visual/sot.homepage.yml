@@ -1,0 +1,30 @@
+# Imported from adobecom/nala/data/homepage/sot-basic.yml
+# Comparison: production (a) vs stage (b) — same path, different host
+
+AdobeHomepageNoMEP:
+  a: 'https://www.adobe.com/?mep=off'
+  b: 'https://www.stage.adobe.com/?mep=off'
+AdobeHomepage:
+  a: 'https://www.adobe.com'
+  b: 'https://www.stage.adobe.com'
+AdobeHomepageUK:
+  a: 'https://www.adobe.com/uk/?mep=off&akamaiLocale=uk'
+  b: 'https://www.stage.adobe.com/uk/?mep=off&akamaiLocale=uk'
+AdobeHomepageUKNoMEP:
+  a: 'https://www.adobe.com/uk/?akamaiLocale=uk'
+  b: 'https://www.stage.adobe.com/uk/?akamaiLocale=uk'
+AdobeHomepageDE:
+  a: 'https://www.adobe.com/de?akamaiLocale=de'
+  b: 'https://www.stage.adobe.com/de?akamaiLocale=de'
+AdobeHomepageFR:
+  a: 'https://www.adobe.com/fr?akamaiLocale=fr'
+  b: 'https://www.stage.adobe.com/fr?akamaiLocale=fr'
+AdobeHomepageES:
+  a: 'https://www.adobe.com/es?akamaiLocale=es'
+  b: 'https://www.stage.adobe.com/es?akamaiLocale=es'
+AdobeHomepageJP:
+  a: 'https://www.adobe.com/jp?akamaiLocale=jp'
+  b: 'https://www.stage.adobe.com/jp?akamaiLocale=jp'
+AdobeHomepageMENA:
+  a: 'https://www.adobe.com/mena_ar?akamaiLocale=mena'
+  b: 'https://www.stage.adobe.com/mena_ar?akamaiLocale=mena'

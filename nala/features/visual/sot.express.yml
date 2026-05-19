@@ -1,0 +1,39 @@
+# Imported from adobecom/nala/data/express/sot-basic.yml
+# Comparison: production (a) vs stage (b) — paths prepended with adobe.com hosts
+
+blog:
+  a: 'https://www.adobe.com/express/learn/blog'
+  b: 'https://www.stage.adobe.com/express/learn/blog'
+business:
+  a: 'https://www.adobe.com/express/business'
+  b: 'https://www.stage.adobe.com/express/business'
+color:
+  a: 'https://www.adobe.com/express/colors/red'
+  b: 'https://www.stage.adobe.com/express/colors/red'
+entitled:
+  a: 'https://www.adobe.com/express/entitled'
+  b: 'https://www.stage.adobe.com/express/entitled'
+feature:
+  a: 'https://www.adobe.com/express/feature'
+  b: 'https://www.stage.adobe.com/express/feature'
+homepage:
+  a: 'https://www.adobe.com/express/?martech=off'
+  b: 'https://www.stage.adobe.com/express/?martech=off'
+pricing:
+  a: 'https://www.adobe.com/express/pricing'
+  b: 'https://www.stage.adobe.com/express/pricing'
+create:
+  a: 'https://www.adobe.com/express/create'
+  b: 'https://www.stage.adobe.com/express/create'
+templates:
+  a: 'https://www.adobe.com/express/templates/'
+  b: 'https://www.stage.adobe.com/express/templates/'
+education:
+  a: 'https://www.adobe.com/education/express'
+  b: 'https://www.stage.adobe.com/education/express'
+nonprofits:
+  a: 'https://www.adobe.com/express/nonprofits'
+  b: 'https://www.stage.adobe.com/express/nonprofits'
+students:
+  a: 'https://www.adobe.com/express/learn/students'
+  b: 'https://www.stage.adobe.com/express/learn/students'
