@@ -1,47 +1,18 @@
 # Imported from adobecom/nala/data/cc/sot-basic.yml
-# Mode: explicit a/b host swap — production (a) vs stage (b)
-# www.adobe.com pages don't honor ?milolibs= param (not milo-based),
-# so testing 'stage milo' = hitting www.stage.adobe.com
+# Mode: milolibs (A = stage URL, B = stage URL + ?milolibs=stage)
+# Tests stage page rendering with default milo vs stage milo branch.
 
-CreativeCloud:
-  a: 'https://www.adobe.com/creativecloud.html'
-  b: 'https://www.stage.adobe.com/creativecloud.html'
-CreativeCloudFeatures:
-  a: 'https://www.adobe.com/creativecloud/features.html'
-  b: 'https://www.stage.adobe.com/creativecloud/features.html'
-CreativeCloudPhotography:
-  a: 'https://www.adobe.com/creativecloud/photography.html'
-  b: 'https://www.stage.adobe.com/creativecloud/photography.html'
-CreativeCloudStudents:
-  a: 'https://www.adobe.com/creativecloud/buy/students.html'
-  b: 'https://www.stage.adobe.com/creativecloud/buy/students.html'
-CreativeCloudAllApps:
-  a: 'https://www.adobe.com/creativecloud/all-apps.html'
-  b: 'https://www.stage.adobe.com/creativecloud/all-apps.html'
-CreativeCloudPhotoshop:
-  a: 'https://www.adobe.com/products/photoshop.html'
-  b: 'https://www.stage.adobe.com/products/photoshop.html'
-CreativeCloudIllustrator:
-  a: 'https://www.adobe.com/products/illustrator.html'
-  b: 'https://www.stage.adobe.com/products/illustrator.html'
-CreativeCloudPhotoshopLightroom:
-  a: 'https://www.adobe.com/products/photoshop-lightroom.html'
-  b: 'https://www.stage.adobe.com/products/photoshop-lightroom.html'
-CreativeCloudPremiere:
-  a: 'https://www.adobe.com/products/premiere.html'
-  b: 'https://www.stage.adobe.com/products/premiere.html'
-CreativeCloudAIOverview:
-  a: 'https://www.adobe.com/ai/overview.html'
-  b: 'https://www.stage.adobe.com/ai/overview.html'
-CreativeCloudFirefly:
-  a: 'https://www.adobe.com/products/firefly.html'
-  b: 'https://www.stage.adobe.com/products/firefly.html'
-CreativeCloudPhotographyApps:
-  a: 'https://www.adobe.com/creativecloud/photography/apps.html'
-  b: 'https://www.stage.adobe.com/creativecloud/photography/apps.html'
-CreativeCloudDesign:
-  a: 'https://www.adobe.com/creativecloud/design.html'
-  b: 'https://www.stage.adobe.com/creativecloud/design.html'
-CreativeCloudVideo:
-  a: 'https://www.adobe.com/creativecloud/video.html'
-  b: 'https://www.stage.adobe.com/creativecloud/video.html'
+CreativeCloud: 'https://www.stage.adobe.com/creativecloud.html'
+CreativeCloudFeatures: 'https://www.stage.adobe.com/creativecloud/features.html'
+CreativeCloudPhotography: 'https://www.stage.adobe.com/creativecloud/photography.html'
+CreativeCloudStudents: 'https://www.stage.adobe.com/creativecloud/buy/students.html'
+CreativeCloudAllApps: 'https://www.stage.adobe.com/creativecloud/all-apps.html'
+CreativeCloudPhotoshop: 'https://www.stage.adobe.com/products/photoshop.html'
+CreativeCloudIllustrator: 'https://www.stage.adobe.com/products/illustrator.html'
+CreativeCloudPhotoshopLightroom: 'https://www.stage.adobe.com/products/photoshop-lightroom.html'
+CreativeCloudPremiere: 'https://www.stage.adobe.com/products/premiere.html'
+CreativeCloudAIOverview: 'https://www.stage.adobe.com/ai/overview.html'
+CreativeCloudFirefly: 'https://www.stage.adobe.com/products/firefly.html'
+CreativeCloudPhotographyApps: 'https://www.stage.adobe.com/creativecloud/photography/apps.html'
+CreativeCloudDesign: 'https://www.stage.adobe.com/creativecloud/design.html'
+CreativeCloudVideo: 'https://www.stage.adobe.com/creativecloud/video.html'
