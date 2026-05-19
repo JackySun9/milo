@@ -62,23 +62,28 @@ const COMPARE_OPTS = {
 /**
  * Wait until the page is "settled" before taking the screenshot.
  *
- * Three phases:
- *   1. FEDS footer visible — top-to-bottom layout rendered.
- *   2. Slow scroll bottom→top — triggers Intersection-Observer-based
- *      lazy loads (customer story cards, data feeds, hero images that
- *      hydrate on scroll-into-view).
- *   3. networkidle — any AJAX kicked off by step 2 has settled.
+ * Two strategies, opt-in per site via yaml `__config__.waitStrategy`:
  *
- * Without step 2 the screenshot captures loading spinners where
- * lazy-loaded sections should be.
+ *   'footer'   (default) — only wait for FEDS footer visibility.
+ *                          Fast (~0 ms extra). Works for static pages
+ *                          where the bulk of content is in the initial
+ *                          HTML (BACOM marketing pages).
+ *
+ *   'scroll'             — footer + slow bottom-scroll + networkidle.
+ *                          ~4 s slower per capture. Needed for pages
+ *                          with Intersection-Observer-driven lazy
+ *                          sections (graybox PoC customer-story cards,
+ *                          data feeds, hero hydration).
  */
-async function waitForPageReady(page) {
-  // 1. Wait for FEDS footer
+async function waitForPageReady(page, strategy) {
+  // Always wait for footer (cheap, no-op for non-FEDS pages after 20 s)
   await page.locator('.feds-footer-privacyLink').first()
     .waitFor({ state: 'visible', timeout: 20_000 })
     .catch(() => {});
 
-  // 2. Scroll dance to wake up Intersection Observers
+  if (strategy !== 'scroll') return;
+
+  // Slow scroll wakes Intersection Observers across the whole page
   await page.evaluate(async () => {
     const step = 600;
     const delay = 100;
@@ -93,13 +98,13 @@ async function waitForPageReady(page) {
     window.scrollTo(0, 0);
   });
 
-  // 3. Wait for any lazy-fetch network activity to settle
+  // Wait for any lazy AJAX/image fetches kicked off by the scroll
   await page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {});
 }
 
-async function captureViewport(viewportName, urls, folderPath, milolibs) {
+async function captureViewport(viewportName, urls, folderPath, milolibs, waitStrategy) {
   const preset = VIEWPORTS[viewportName];
-  console.log(`\n▶ Viewport: ${viewportName} (${preset.device})`);
+  console.log(`\n▶ Viewport: ${viewportName} (${preset.device})  ·  wait: ${waitStrategy}`);
   const browser = await preset.engine.launch();
   const ctxOpts = devices[preset.device] ? { ...devices[preset.device] } : {};
   if (preset.viewport) ctxOpts.viewport = preset.viewport;
@@ -122,8 +127,8 @@ async function captureViewport(viewportName, urls, folderPath, milolibs) {
     try {
       const result = await takeTwo(
         page,
-        urlA, () => waitForPageReady(page),
-        urlB, () => waitForPageReady(page),
+        urlA, () => waitForPageReady(page, waitStrategy),
+        urlB, () => waitForPageReady(page, waitStrategy),
         folderPath, name,
         { fullPage: true },
       );
@@ -191,9 +196,18 @@ async function main() {
     console.error(`No data file at ${dataPath}. Add it first.`);
     process.exit(1);
   }
-  const urls = yaml.load(fs.readFileSync(dataPath, 'utf8'));
+  const raw = yaml.load(fs.readFileSync(dataPath, 'utf8'));
+  // `__config__` is a reserved top-level key for per-site options.
+  // Everything else is a URL entry.
+  const yamlConfig = raw.__config__ || {};
+  const urls = Object.fromEntries(
+    Object.entries(raw).filter(([k]) => !k.startsWith('__')),
+  );
+  // Resolution order: WAIT_STRATEGY env > yaml __config__.waitStrategy > 'footer'
+  const waitStrategy = process.env.WAIT_STRATEGY || yamlConfig.waitStrategy || 'footer';
+
   console.log(`▶ Site: ${site}  ·  URLs: ${Object.keys(urls).length}  ·  Viewports: ${viewports.join(',')}`);
-  console.log(`▶ MILO_LIBS: ${milolibs}`);
+  console.log(`▶ MILO_LIBS: ${milolibs}  ·  wait: ${waitStrategy}`);
 
   // SHARD_NAME enables parallel-matrix mode: each matrix job writes its
   // own results-<shard>.json so they don't overwrite each other on S3.
@@ -207,7 +221,7 @@ async function main() {
 
   const allResults = {};
   for (const vp of viewports) {
-    const vpResults = await captureViewport(vp, urls, folderPath, milolibs);
+    const vpResults = await captureViewport(vp, urls, folderPath, milolibs, waitStrategy);
     Object.assign(allResults, vpResults);
   }
 
