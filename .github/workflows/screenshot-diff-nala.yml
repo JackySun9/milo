@@ -48,7 +48,17 @@ jobs:
           node-version: '20'
           cache: 'npm'
 
-      - name: Install milo dependencies
+      - name: Cache node_modules
+        id: node-modules-cache
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-node-modules-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-modules-
+
+      - name: Install milo dependencies (cache miss only)
+        if: steps.node-modules-cache.outputs.cache-hit != 'true'
         run: npm ci
 
       - name: Install Playwright browsers

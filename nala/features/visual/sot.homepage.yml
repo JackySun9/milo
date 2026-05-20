@@ -2,6 +2,12 @@
 # Mode: milolibs (A = stage URL, B = stage URL + ?milolibs=stage)
 # Tests stage page rendering with default milo vs stage milo branch.
 
+# Homepage has lots of below-the-fold content (cards, fragments) that
+# only hydrate on scroll. Without `scroll` strategy we captured 24/27
+# diffs — many of which were "loading spinner vs loaded card".
+__config__:
+  waitStrategy: scroll
+
 AdobeHomepageNoMEP: 'https://www.stage.adobe.com/?mep=off'
 AdobeHomepage: 'https://www.stage.adobe.com'
 AdobeHomepageUK: 'https://www.stage.adobe.com/uk/?mep=off&akamaiLocale=uk'

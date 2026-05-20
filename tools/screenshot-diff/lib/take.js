@@ -78,6 +78,7 @@ async function takeTwo(
   folderPath,
   fileName,
   options = {},
+  beforeBeta,
 ) {
   const urls = [];
   const result = {};
@@ -95,6 +96,10 @@ async function takeTwo(
   }
   result.order = 1;
   result.a = nameStable;
+
+  // Optional hook to reset state (clear cookies / storage) before B's goto,
+  // so server-side personalization doesn't carry over from A's response.
+  if (typeof beforeBeta === 'function') { await beforeBeta(); }
 
   console.info(`[Test Page]: ${urlBeta}`);
   await page.goto(urlBeta);

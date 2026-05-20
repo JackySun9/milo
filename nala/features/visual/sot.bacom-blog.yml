@@ -1,6 +1,11 @@
 # Imported from adobecom/nala/data/bacom-blog/visual/sot.yml
 # Comparison: URL vs URL+?milolibs=stage (milolibs mode)
 
+# Blog pages lazy-load article cards via Intersection Observer; the
+# default footer-only wait captures loading spinners on mobile.
+__config__:
+  waitStrategy: scroll
+
 homepage: 'https://main--da-bacom-blog--adobecom.aem.live/blog/'
 de-homepage: 'https://main--da-bacom-blog--adobecom.aem.live/de/blog/'
 fr-homepage: 'https://main--da-bacom-blog--adobecom.aem.live/fr/blog/'

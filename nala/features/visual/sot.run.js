@@ -114,6 +114,17 @@ async function captureViewport(viewportName, urls, folderPath, milolibs, waitStr
   const context = await browser.newContext(ctxOpts);
   const page = await context.newPage();
 
+  // Clear cookies + storage to give A and B identical visitor state for
+  // server-side personalization (rotating banners, A/B test bucketing,
+  // sign-in promos). Without this, A's response cookies are sent on B's
+  // request → different content → false-positive diff.
+  const resetState = async () => {
+    await context.clearCookies();
+    await page.evaluate(() => {
+      try { localStorage.clear(); sessionStorage.clear(); } catch (e) { /* opaque origin */ }
+    }).catch(() => {});
+  };
+
   const results = {};
   for (const [key, value] of Object.entries(urls)) {
     // Two yaml formats:
@@ -125,12 +136,14 @@ async function captureViewport(viewportName, urls, folderPath, milolibs, waitStr
     const name = `${key}-${viewportName}`;
     console.log(`  [${name}] ${urlA}  vs  ${urlB}`);
     try {
+      await resetState(); // before A's goto
       const result = await takeTwo(
         page,
         urlA, () => waitForPageReady(page, waitStrategy),
         urlB, () => waitForPageReady(page, waitStrategy),
         folderPath, name,
         { fullPage: true },
+        resetState, // beforeBeta hook — reset between A capture and B goto
       );
       results[name] = [result];
     } catch (err) {
@@ -200,13 +213,23 @@ async function main() {
   // `__config__` is a reserved top-level key for per-site options.
   // Everything else is a URL entry.
   const yamlConfig = raw.__config__ || {};
-  const urls = Object.fromEntries(
-    Object.entries(raw).filter(([k]) => !k.startsWith('__')),
-  );
+  const allEntries = Object.entries(raw).filter(([k]) => !k.startsWith('__'));
   // Resolution order: WAIT_STRATEGY env > yaml __config__.waitStrategy > 'footer'
   const waitStrategy = process.env.WAIT_STRATEGY || yamlConfig.waitStrategy || 'footer';
 
-  console.log(`▶ Site: ${site}  ·  URLs: ${Object.keys(urls).length}  ·  Viewports: ${viewports.join(',')}`);
+  // SHARD env (e.g. "1/2") splits the URL list across matrix jobs. Each
+  // shard gets a contiguous slice. Default "1/1" → no split.
+  const shardSpec = process.env.SHARD || '1/1';
+  const [shardIdx, shardTotal] = shardSpec.split('/').map(Number);
+  if (!Number.isInteger(shardIdx) || !Number.isInteger(shardTotal) || shardTotal < 1 || shardIdx < 1 || shardIdx > shardTotal) {
+    console.error(`Invalid SHARD='${shardSpec}'. Use 'X/Y' with 1 ≤ X ≤ Y.`);
+    process.exit(1);
+  }
+  const sliceFrom = Math.floor((shardIdx - 1) * allEntries.length / shardTotal);
+  const sliceTo = Math.floor(shardIdx * allEntries.length / shardTotal);
+  const urls = Object.fromEntries(allEntries.slice(sliceFrom, sliceTo));
+
+  console.log(`▶ Site: ${site}  ·  URLs: ${Object.keys(urls).length}/${allEntries.length} (shard ${shardSpec}, slice [${sliceFrom},${sliceTo}))  ·  Viewports: ${viewports.join(',')}`);
   console.log(`▶ MILO_LIBS: ${milolibs}  ·  wait: ${waitStrategy}`);
 
   // SHARD_NAME enables parallel-matrix mode: each matrix job writes its
