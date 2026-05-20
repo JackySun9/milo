@@ -125,6 +125,18 @@ async function captureViewport(viewportName, urls, folderPath, milolibs, waitStr
     }).catch(() => {});
   };
 
+  // Smart query-string append: if url already has `?...`, use `&` to join.
+  // Otherwise keep the leading `?` from milolibs.
+  // Example: appendQuery('https://x.com/?mep=off', '?milolibs=stage')
+  //   →     'https://x.com/?mep=off&milolibs=stage'  (not '...?mep=off?milolibs=stage')
+  const appendQuery = (url, qs) => {
+    if (!qs) return url;
+    const stripped = qs.startsWith('?') ? qs.slice(1) : qs;
+    if (!stripped) return url;
+    const sep = url.includes('?') ? '&' : '?';
+    return `${url}${sep}${stripped}`;
+  };
+
   const results = {};
   for (const [key, value] of Object.entries(urls)) {
     // Two yaml formats:
@@ -132,7 +144,7 @@ async function captureViewport(viewportName, urls, folderPath, milolibs, waitStr
     //   2. `key: { a: 'https://...', b: 'https://...' }` → explicit pair mode
     //      (e.g. graybox: aem.reviews preview vs business-graybox publish)
     const urlA = typeof value === 'string' ? value : value.a;
-    const urlB = typeof value === 'string' ? value + milolibs : value.b;
+    const urlB = typeof value === 'string' ? appendQuery(value, milolibs) : value.b;
     const name = `${key}-${viewportName}`;
     console.log(`  [${name}] ${urlA}  vs  ${urlB}`);
     try {
