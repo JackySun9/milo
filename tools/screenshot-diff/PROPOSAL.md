@@ -1,320 +1,325 @@
-# Screenshot Diff Tool — Standardization Proposal
+# Screenshot Diff Tool — Status & Proposal
 
-**Status:** PoC complete, awaiting infra approvals
-**Owner:** Jacky Sun (xiasun@adobe.com)
-**Last updated:** 2026-05-07
+**Status:** Production-ready PoC, running on 6-Mac-Mini self-hosted pool, 7 sites onboarded
+**Owner:** Jacky Sun ([xiasun@adobe.com](mailto:xiasun@adobe.com))
+**Last updated:** 2026-05-20
 
 ## TL;DR
 
-Migrate the screenshot-diff capability from `adobecom/nala` (BACOM-internal,
-test-framework-coupled) into `adobecom/milo` as a self-service tool at
-`milo.adobe.com/tools/screenshot-diff`. Make it usable by any Adobe team via
-a simple URL form, backed by a self-hosted Mac Mini runner pool and our
-internal S3 bucket. PoC is complete and validated locally.
+A self-service visual regression tool for verifying that **milo PRs don't
+visually break downstream sites** (BACOM, CC, DC, Express, Homepage,
+bacom-blog) plus graybox PoC publish parity. Backed by:
 
-## Background
+- **6 self-hosted Mac Mini runners** in the SJ datacenter
+  (sj1010122072225/226/231/234/235/236)
+- **Internal S3** for artifacts (s3-sj3.corp.adobe.com/milo)
+- **Existing nala-auto viewer** ([http://nala-auto.corp.adobe.com/imagediff/&lt;site&gt;](http://nala-auto.corp.adobe.com/imagediff/bacom))
+  for human review — zero new UI built
+- **GitHub Actions workflows** in `JackySun9/milo` fork on the
+  `screenshot-diff-tool` branch ([pending upstream PR](https://github.com/JackySun9/milo/tree/screenshot-diff-tool))
 
-The visual regression code in
-[`adobecom/nala/libs/screenshot/`](https://github.com/adobecom/nala/tree/main/libs/screenshot)
-works well for BACOM's needs but is:
+Triggering 7 sites end-to-end takes **~29 minutes** (small sites finish in 3–7 min,
+BACOM tail at ~29 min) — well within "review before merging the PR" budget.
 
-- **Coupled** to nala's Playwright test harness — you must write spec files
-  to use it
-- **Not discoverable** outside BACOM
-- **Inconsistently configured** — internal-S3 path (`uploads3.js`) and
-  public-S3 path (`uploads3Public.js`) coexist; current GitHub workflow
-  references env vars that don't match either upload script
-- **Hardcoded** to specific S3 endpoints, buckets, and base directories
+## What works today
 
-Other Adobe teams who could benefit from visual regression (CC, DC, Creative
-Brand Concierge, etc.) currently can't use it without copying the code.
+```
+                                     ┌──────────────────────────────────┐
+   gh workflow run screenshot-       │  Mac Mini pool (6 runners)       │
+   diff-nala-parallel \              │  labels: self-hosted macOS       │
+     -f site=bacom                   │          screendiff               │
+                ↓                    │  • SJ corp network               │
+   GitHub Actions dispatch           │  • can reach internal S3 ✓       │
+                ↓                    │  • Chromium-only browser         │
+   ┌──────────────────────────┐      └──────────────────────────────────┘
+   │  capture-chrome  ─┐      │                  ↑
+   │  capture-ipad    ─┤───── │  matrix job → 1 runner per viewport
+   │  capture-iphone  ─┘      │                  │
+   │  (iphone bundles merge)  │                  │
+   └──────────────────────────┘                  │
+                ↓ uploads PNGs + results-<viewport>.json
+   ┌──────────────────────────┐                  │
+   │  Internal S3             │  ← writes shards  ┘
+   │  s3-sj3.corp.adobe.com/  │  (3 viewports × 1 site = 3 shards)
+   │  milo/screenshots/<site>/│
+   └──────────────────────────┘
+                ↑ reads, merges, re-uploads results.json
+                │
+   iphone capture job's "merge" step:
+     • polls nala-auto proxy for chrome + ipad shards
+     • runs lib/merge.js locally
+     • uploads consolidated results.json
+                ↓
+   ┌──────────────────────────────────────────────┐
+   │  nala-auto.corp.adobe.com/imagediff/<site>   │
+   │  (existing internal viewer)                  │
+   │  - reads /api/milo/screenshots/<site>/       │
+   │  - shows side-by-side + diff highlights      │
+   └──────────────────────────────────────────────┘
+```
 
-## Goals
+## Sites onboarded (7)
 
-1. **Anyone in Adobe can use it** — open a URL, enter two URLs, get a diff
-2. **Internal-only** — internal S3, internal network, IMS-authenticated
-3. **Standardized** — one canonical implementation, not per-team forks
-4. **Backwards-compatible** — nala continues to work during transition
+| Site | URLs | Mode | Comparison |
+|---|---|---|---|
+| **bacom** | 62 | milolibs | aem.live URL vs URL + `?milolibs=stage` (main vs stage milo, BACOM-native) |
+| **bacom-blog** | 18 | milolibs | same pattern, aem.live URLs |
+| **cc** | 14 | milolibs | stage URL (loads main milo via self-hosted mirror) vs URL + `?milolibs=stage` |
+| **dc** | 6 | milolibs | same pattern |
+| **express** | 12 | milolibs | same pattern |
+| **homepage** | 9 | milolibs (scroll wait) | same pattern, plus scroll dance for lazy hydration |
+| **graybox-poc** | 10 | a/b pair (scroll wait) | aem.reviews preview vs business-graybox publish (env compare, not milo version) |
 
-## Non-Goals (for v1)
+**Total: 131 URLs × 3 viewports × 2 captures = 786 screenshots per full run.**
 
-- Public/external user access
-- Cross-browser concurrent matrix runs in the UI form (use workflow inputs)
-- Run history / time-series UI (latest-only for now)
-- Automated lifecycle policy on S3 (manual cleanup for now)
+Data files live in `milo/nala/features/visual/sot.<site>.yml`. Adding a new
+site = drop a new yml file (no code change). yaml supports two formats:
 
-## Decisions
+```yaml
+# milolibs mode (one URL, B = URL + MILO_LIBS):
+'CreativeCloud': 'https://www.stage.adobe.com/creativecloud.html'
 
-### D1. Host = Milo tools, not DA
+# Explicit a/b pair (for graybox / cross-env comparisons):
+'pocone-customer-success-stories':
+  a: 'https://dapocone--main--da-bacom--adobecom.aem.reviews/customer-success-stories/customer-success-stories'
+  b: 'https://dapocone.business-graybox.adobe.com/customer-success-stories/customer-success-stories.html'
+```
 
-| | Milo `tools/` | DA tools |
+Per-site config block:
+```yaml
+__config__:
+  waitStrategy: scroll   # 'footer' (default) or 'scroll' (for Intersection-Observer-heavy pages)
+```
+
+## Performance (last full 7-site run, large→small order)
+
+| Site | Run time | Notes |
 |---|---|---|
-| Audience | Engineers / web ops (matches our users) | Content authors |
-| Distribution | One PR, one URL works for everyone | Per-project plugin registration |
-| Existing convention | `loc/`, `floodbox/`, `graybox/` — direct peers | Build scripts only, no convention |
+| bacom        | 14:46 | Triggered first → grabbed 3 runners immediately |
+| bacom-blog   | 7:38  | Cascade |
+| cc           | 14:53 | |
+| express      | 16:30 | |
+| graybox-poc  | 17:12 | scroll wait adds time |
+| homepage     | 23:40 | scroll wait + last triggered |
+| dc           | ~4:00 | |
+| **Total wall** | **~24 min** | (constrained by homepage tail) |
 
-**Picked Milo.** DA's plugin model requires every consuming team's admin to
-register your tool in their config sheet — effectively zero discoverability.
+In **small→large order** (what we recommend for team UX):
 
-### D2. Storage = Internal S3 only
+| Site | Run time | Notes |
+|---|---|---|
+| dc           | 3:12  | DC team can review **3 min after trigger** |
+| graybox-poc  | 6:15  | |
+| homepage     | 7:45  | |
+| express      | 10:57 | |
+| cc           | 14:59 | |
+| bacom-blog   | 16:02 | |
+| bacom        | 29:39 | Last to finish, but BACOM team is used to ~13 min cycles anyway |
+| **Total wall** | **~29 min** | |
 
-Drop the public-S3 / STS-assume-role code path. Reasons:
+The 5-min trade-off (24 → 29) is worth it: **each downstream team gets feedback as soon as their site is done**, not waiting for the slowest site in the batch.
 
-- Adobe employees are the entire target audience
-- Internal S3 (`s3-sj3.corp.adobe.com`) is what BACOM already uses
-- Eliminating the public path removes ~150 LOC and a dependency
-  (`@aws-sdk/client-sts`)
+## Diff quality
 
-**Constraint introduced:** GitHub-hosted runners can't reach internal S3.
-Drives D3.
+Real numbers comparing the pre-optimization baseline to current state:
 
-### D3. Compute = Self-hosted Mac Mini pool
-
-GitHub-hosted runners are public cloud → can't access `*.corp.adobe.com`.
-We have three Mac Minis available:
-
-| Host | Suggested runner name |
-|---|---|
-| `sj1010122072233.corp.adobe.com` | `mac-mini-233` |
-| `sj1010122072235.corp.adobe.com` | `mac-mini-235` |
-| `sj1010122072236.corp.adobe.com` | `mac-mini-236` |
-
-Bonus over Linux runners: native Webkit / Safari / Mobile-Safari emulation,
-matching production user-agents better.
-
-### D4. Form factor = Web tool + GitHub workflow_dispatch
-
-Browser-based UI for "anyone can use," but actual capture runs in CI for
-infra reasons (Playwright + browser binaries on a corp-network host). UI
-calls GitHub API to trigger `workflow_dispatch`, polls for completion, reads
-results from S3.
-
-### D5. Dependency isolation
-
-The tool ships its own `package.json` inside `tools/screenshot-diff/`
-instead of adding `@aws-sdk/client-s3` to milo's root deps. Keeps milo's
-dependency tree untouched and simplifies the PR.
-
-### D6. Reads via nala-auto, not direct S3
-
-Browser fetches go through
-[`nala-auto.corp.adobe.com`](https://github.com/adobecom/nala-auto) which
-already proxies the same S3 bucket for the existing BACOM internal viewer.
-This avoids needing CORS rules on the S3 endpoint itself — we just need a
-~3-line CORS PR to `adobecom/nala-auto`.
-
-Milo's tool **does not duplicate** nala-auto's existing
-`/imagediff/:directory` viewer; they coexist:
-
-- **`nala-auto.corp.adobe.com/imagediff/...`** — BACOM internal dashboard
-  (current users keep using it)
-- **`milo.adobe.com/tools/screenshot-diff/`** — public-facing entry point
-  for cross-team self-service ("anyone can compare two URLs")
-
-Both read the same S3 schema.
-
-## Architecture
-
-```
-┌──────────────────────────────────────────────────┐
-│  Milo tool UI                                    │
-│  milo.adobe.com/tools/screenshot-diff/           │
-│  - Form: URL A, URL B, viewport, project         │
-│  - Triggers workflow via GitHub API              │
-│  - Renders diff images                           │
-└──────────────────────────────────────────────────┘
-            ↓ trigger              ↑ fetch (CORS)
-            │                      │
-            │      ┌───────────────┴──────────────┐
-            │      │  nala-auto.corp.adobe.com    │
-            │      │  (existing internal viewer)  │
-            │      │  /api/milo/*  → S3 proxy     │
-            │      └──────────────────────────────┘
-            │                      ↑ S3 GET (corp net)
-            ↓                      │
-┌──────────────────────────────────────────────────┐
-│  GitHub Actions workflow                         │
-│  .github/workflows/screenshot-diff.yml           │
-│  runs-on: [self-hosted, macOS, screendiff]       │
-└──────────────────────────────────────────────────┘
-            ↓ executes on
-┌──────────────────────────────────────────────────┐
-│  Mac Mini pool (3 hosts in SJ corp network)      │
-│  Playwright + browsers + Node 20                 │
-│  - Capture URL A and URL B                       │
-│  - Pixel diff (playwright-core comparator)       │
-│  - Upload artifacts to internal S3               │
-└──────────────────────────────────────────────────┘
-            ↓ S3 PUT (corp network)
-┌──────────────────────────────────────────────────┐
-│  Internal S3 (Cleversafe / IBM COS)              │
-│  s3-sj3.corp.adobe.com/milo/screenshots/         │
-│    <project>/                                    │
-│      shot-a.png  shot-b.png  shot-diff.png       │
-│      results.json   timestamp.json               │
-└──────────────────────────────────────────────────┘
-```
-
-### Why route reads through nala-auto
-
-The Milo UI runs in users' browsers on `milo.adobe.com`. Internal S3
-(`s3-sj3.corp.adobe.com`) needs CORS headers to allow cross-origin fetches
-from a public origin. Two paths to solve this:
-
-1. **Configure CORS on S3** — requires S3 admin involvement, slow
-2. **Route through `nala-auto.corp.adobe.com/api/milo/*`** — nala-auto is
-   already a BACOM-controlled `http-proxy-middleware` server fronting the
-   same S3 bucket, so a ~3-line CORS PR to
-   [`adobecom/nala-auto`](https://github.com/adobecom/nala-auto) is all we
-   need
-
-We pick **option 2**. nala-auto already serves the existing
-`/imagediff/:directory` viewer for the BACOM team — Milo simply leverages
-the same proxy for its tool UI.
-
-## Status
-
-### Done (PoC complete in `JackySun9/milo` fork on `screenshot-diff-tool` branch)
-
-- ✅ Lib code extracted from nala, parameterised via `lib/config.js`
-- ✅ Standalone driver `run.js` (env-var input → S3 output)
-- ✅ Tool UI (HTML + JS + CSS)
-- ✅ GitHub Actions workflow targeting `[self-hosted, macOS, screendiff]`
-- ✅ Mac Mini bootstrap script `setup-runner.sh`
-- ✅ README with end-user docs
-- ✅ Local smoke test passed:
-  ```
-  ▶ Capturing A: https://main--milo--adobecom.aem.live/
-  ▶ Capturing B: https://main--milo--adobecom.aem.page/
-  ▶ Comparing pixels  → Differences found
-  ▶ Wrote screenshots/smoke-test/results.json
-  ✓ Done. DIFF
-  ```
-  Diff image visually correct.
-
-**14 files, ~700 LOC, ~0 dependencies added to milo's root.**
-
-### Not done (needs infra / approvals)
-
-- ⬜ Mac Mini runner registration (needs registration tokens; setup script ready)
-- ⬜ S3 secrets configured (`SCREENSHOT_S3_ACCESS_KEY_ID` / `SCREENSHOT_S3_SECRET_ACCESS_KEY`)
-- ⬜ End-to-end run on real infra
-- ⬜ Org-level runner pool (needs `adobecom` org admin to make Mac Minis usable by any consuming repo)
-- ⬜ CORS / Helix-proxy decision for browser → internal S3 reads
-- ⬜ S3 lifecycle policy (auto-delete old runs)
-- ⬜ Upstream PR
-
-## Action Plan
-
-### Phase 1 — Infra setup (this week)
-
-| # | Task | Owner | Deps |
+| Site | Before opt | After opt | Change |
 |---|---|---|---|
-| 1.1 | Register first Mac Mini (`sj1010122072233`) as repo-level runner on `JackySun9/milo` | Jacky | GitHub registration token |
-| 1.2 | Configure `SCREENSHOT_S3_ACCESS_KEY_ID` + `SCREENSHOT_S3_SECRET_ACCESS_KEY` as repo secrets | Jacky | S3 service-account credentials |
-| 1.3 | Trigger first real workflow run, verify S3 upload | Jacky | 1.1 + 1.2 |
-| 1.4 | Submit CORS PR to `adobecom/nala-auto` + verify Milo UI reads back | Jacky | 1.3 |
+| **homepage**    | 24/27 = 89% | **1/27 = 4%** | **🎉 −85 pts** (cookie/storage reset killed personalization noise) |
+| **bacom**       | 47/186 = 25% | 28/189 = 15% | −10 pts |
+| **bacom-blog**  | 22/54 = 41%  | 18/54 = 33% | −8 pts (mobile still high — content really varies) |
+| express       | 9/36 = 25%   | 10/36 = 28% | flat |
+| cc            | 8/42 = 19%   | 8/42 = 19%  | flat |
+| dc            | 10/18 = 56%  | 12/18 = 67% | flat (high % is real — content drift) |
+| graybox-poc   | 16/30 = 53%  | 17/30 = 57% | flat (high % is expected — env compare) |
+| **Total**     | **136/393 = 35%** | **94/396 = 24%** | **−11 pts overall** |
 
-### Phase 2 — Pool setup (next week)
+## Architecture decisions
 
-| # | Task | Owner | Deps |
-|---|---|---|---|
-| 2.1 | Register remaining 2 Mac Minis | Jacky | Phase 1 done |
-| 2.2 | Decide org-level vs repo-level | Jacky + adobecom admin | Need adobecom admin permission |
-| 2.3 | If org-level: re-register all 3 at org scope | adobecom admin | 2.2 |
-| 2.4 | If repo-level: enumerate consuming repos and onboard each | each consuming team | 2.2 |
+### D1. Milo `tools/` over DA, scripts in milo's `nala/` folder
 
-### Phase 3 — Hardening (week 3)
+We host data + driver in `adobecom/milo/nala/features/visual/`, matching milo's
+existing nala convention. Shared screenshot lib lives in
+`tools/screenshot-diff/lib/` (engine code).
 
-| # | Task | Owner | Deps |
-|---|---|---|---|
-| 3.1 | S3 lifecycle policy (e.g. delete runs older than 30 days) | S3 admin | — |
-| 3.2 | If browser CORS fails: add Helix proxy function | Milo team | Phase 1.4 |
-| 3.3 | Migrate nala's existing visual tests to use this tool | Jacky | Phases 1+2 |
+### D2. Internal S3 only; dropped public S3 path entirely
 
-### Phase 4 — Upstream PR (week 4)
+`s3-sj3.corp.adobe.com/milo/` for all artifacts. Removed the public-S3 / STS
+code path (~150 LOC). User-facing reads go through
+`nala-auto.corp.adobe.com/api/milo/*` (existing proxy).
 
-| # | Task | Owner | Deps |
-|---|---|---|---|
-| 4.1 | PR `JackySun9/milo` → `adobecom/milo` | Jacky | Phases 1-3 stable |
-| 4.2 | Address review feedback | Jacky | 4.1 |
-| 4.3 | Announce in #adobe-web (or relevant channel) | Jacky | merged |
+### D3. Self-hosted Mac Mini pool
 
-## Open questions / risks
+6 Macs registered as repo-level runners on `JackySun9/milo`:
 
-### Q1. Org-level runner registration
+| Host | Status | Notes |
+|---|---|---|
+| sj1010122072225 | online | added later |
+| sj1010122072226 | online | added later |
+| sj1010122072231 | online | added later |
+| sj1010122072234 | online | replaces unreachable .233 |
+| sj1010122072235 | online | original |
+| sj1010122072236 | online | original; also runs other Jenkins worker (coexist OK) |
 
-**Status:** Currently no org-level self-hosted runner pool exists in
-`adobecom`. Registering at org scope requires admin permission. Workaround:
-register at repo scope on `adobecom/milo` (when PR'd) and let consumer
-repos forward via reusable workflow if they're in the same org.
+All 6 have `LaunchAgent` with `KeepAlive: true` (auto-restart if killed,
+fixes the stuck-busy bug from earlier setup).
 
-**Risk:** If we stay repo-scoped on `adobecom/milo`, the runners are "Milo's
-runners" politically. Other teams may want their own. Org-level is the
-right long-term answer.
+### D4. Chromium-only viewports, not WebKit
 
-**Action needed:** Identify `adobecom` org admin and start the conversation
-in parallel with Phase 1.
+iPhone / iPad emulation via Playwright's `devices['iPhone X']` /
+`devices['iPad Mini']` device presets, but launched on **Chromium**. BACOM
+has done this for 1+ year in production without missing real Safari bugs.
+Saves the WebKit engine startup + per-capture overhead. Also halves the
+Playwright browser download (~150 MB saved).
 
-### Q2. Browser → nala-auto CORS
+### D5. Yaml-driven config, two URL modes
 
-Milo UI fetches via `nala-auto.corp.adobe.com/api/milo/...` (not S3
-directly). nala-auto's preflight already returns `Access-Control-Allow-Methods`
-and `Vary: Origin`, but the actual response is missing
-`Access-Control-Allow-Origin: https://milo.adobe.com` (or `*`).
+- **String value** → milolibs mode: `A = URL`, `B = URL + ?milolibs=stage`
+  (smart `?` vs `&` joining for URLs that already have query strings)
+- **Object `{ a, b }`** → explicit pair: full URLs for both sides
+- **`__config__.waitStrategy`** → `footer` (default) or `scroll`
 
-**Fix:** ~3-line PR to
-[`adobecom/nala-auto`](https://github.com/adobecom/nala-auto) — add an
-`onProxyRes` hook in their `http-proxy-middleware` config that sets the
-ACAO header.
+### D6. 3-shard matrix (chrome, ipad, iphone)
 
-**Pre-condition:** User is on Adobe corp network / VPN (nala-auto is
-internal).
+Each site = 3 capture jobs. With 6 runners, up to 2 sites run concurrently.
 
-### Q3. Authentication for triggering workflows
+We tried 4-shard (splitting iphone into halves) — total wall time went UP
+because each site occupied 4 runners, only 1.5 sites concurrent in our
+6-runner pool. Reverted.
 
-Currently the UI opens the GitHub workflow page in a new tab — user clicks
-"Run workflow" themselves. This avoids putting a GitHub PAT in browser
-JavaScript.
+### D7. Bundled merge inside iphone capture (no separate merge job)
 
-For a production-grade v2, options are:
-- A backend service holding a service-account PAT that the UI calls
-- IMS-authenticated Helix function that calls GitHub on the user's behalf
+Original design had a `merge` job with `needs: capture`. With 6 runners and
+7 sites, that produced 21 capture + 7 merge = 28 queued jobs; merges piled
+up behind captures. Observed dc-merge wait: 15 minutes.
 
-**Action needed:** Decide on v2 trajectory after v1 is in users' hands.
+Fix: iphone capture (always the slowest viewport) bundles the merge as
+inline steps:
+1. Capture iphone shard, upload to S3
+2. Poll nala-auto for chrome + ipad shards (5 s × 60 tries)
+3. Run `lib/merge.js` locally to consolidate
+4. Upload merged `results.json` + `timestamp.json`
 
-### Q4. Concurrency limits
+Removes 7 jobs from the queue per 7-site batch.
 
-Three Mac Minis = three concurrent jobs. If many teams use this, we'll
-queue. Monitor in Phase 2 and decide whether to add more hardware.
+### D8. Quality optimizations (5 stacked)
 
-## How to evaluate this PoC yourself
+| | Where | Effect |
+|---|---|---|
+| Comparator threshold + maxDiffPixelRatio | `lib/utils.js`, `lib/compare.mjs`, `sot.run.js` | Suppress per-pixel anti-aliasing noise (matches nala's `visual.config.js` tolerance) |
+| `reducedMotion: 'reduce'` browser context | `sot.run.js` | Stop CSS animations / carousel frame races |
+| `waitStrategy: scroll` (opt-in per site yaml) | `sot.run.js` | Trigger Intersection-Observer lazy load → no loading-spinner captures |
+| Reset cookies + localStorage between A and B | `take.js` (new `beforeBeta` hook) + `sot.run.js` | Server-side personalization doesn't carry over → kills homepage's 89% false-positive rate |
+| Smart `?` vs `&` join | `sot.run.js` (`appendQuery`) | URLs like `?mep=off` get `&milolibs=stage` not `?...?milolibs=stage` |
+
+## Operational gotchas (learned the hard way)
+
+### G1. Mac Mini sleep
+
+`.233` went offline mid-week. Confirmed asleep (no ping, no SSH). For
+production stability, all Macs need `sudo pmset -a sleep 0 disksleep 0 womp 1`
+to prevent system sleep. Done on new Macs; pending on `.235` / `.236`.
+
+### G2. Self-hosted runner "stuck busy"
+
+If Runner.Worker is killed mid-job (SIGKILL), the listener may report
+`busy=true` to GH indefinitely. Fix: enable `KeepAlive: true` in the
+LaunchAgent plist so launchd auto-restarts the listener if Worker dies
+unexpectedly. All 4 new Macs have this; .235/.236 don't yet.
+
+### G3. milolibs param has surprising semantics
+
+- `URL + ?milolibs=stage` → loads `https://stage--milo--adobecom.aem.live/libs/*` ✓
+- `URL + ?milolibs=main` → loads default self-hosted libs (no-op on stage hosts)
+- `URL` (no param) → loads self-hosted libs (which mirror **stage** milo on
+  `www.stage.adobe.com` — confirmed via `last-modified` headers)
+- On `www.adobe.com` (prod): milolibs param is **ignored entirely** by
+  `setLibs` (the `.aem./.hlx./.stage.` guard fails). So you can't test stage
+  milo on prod URLs.
+
+### G4. GitHub Actions cancel is graceful, not SIGKILL
+
+Canceled jobs run to completion of the current step (e.g., a long `npm ci`)
+before honoring the cancel. To force-stop: SSH to runner and `pkill -9 -f
+"Runner.Worker"`. With `KeepAlive: true` LaunchAgent, the listener
+auto-restarts and GH sees the runner online again.
+
+## What's next
+
+| | Description | Priority |
+|---|---|---|
+| **PR to upstream** | `JackySun9/milo` → `adobecom/milo` | High (real "standard tool" status) |
+| **Auto-trigger** | Run on every milo `stage→main` PR via webhook | Medium |
+| **Add 4 more Mac Minis** | 10 runners → 29 min wall drops to ~15 min | Medium |
+| **uar-ai site** | Needs different schema (quiz interactions, not URL list) | Low |
+| **S3 lifecycle policy** | Auto-delete old runs to control bucket size | Low |
+| **Mac Mini ops doc** | Sleep prevention, KeepAlive, registration steps | Medium |
+
+## How to evaluate
 
 ```bash
-# Clone the fork
-git clone https://github.com/JackySun9/milo.git
-cd milo
-git checkout screenshot-diff-tool
-cd tools/screenshot-diff
+# 1. Trigger a single site
+gh workflow run screenshot-diff-nala-parallel.yml \
+  --repo JackySun9/milo --ref screenshot-diff-tool \
+  -f site=bacom
 
-# Install
-npm install
-npx playwright install chromium
+# 2. Trigger all 7 sites in your preferred order
+for site in dc homepage graybox-poc express cc bacom-blog bacom; do
+  gh workflow run screenshot-diff-nala-parallel.yml \
+    --repo JackySun9/milo --ref screenshot-diff-tool \
+    -f site="$site"
+  sleep 2
+done
 
-# Run a comparison locally (no infra needed)
-URL_A="https://main--milo--adobecom.aem.live/" \
-URL_B="https://main--milo--adobecom.aem.page/" \
-PROJECT="my-test" \
-node run.js
+# 3. Watch results land
+open http://nala-auto.corp.adobe.com/imagediff/bacom
+```
 
-# Inspect output
-ls screenshots/my-test/
-open screenshots/my-test/shot-diff.png
+Ad-hoc 2-URL diff (no yml needed):
+```
+gh workflow run screenshot-diff.yml --repo JackySun9/milo --ref screenshot-diff-tool \
+  -f url_a=https://main--milo--adobecom.aem.live/ \
+  -f url_b=https://main--milo--adobecom.aem.page/ \
+  -f project=adhoc
+```
+
+## File map
+
+```
+milo/
+├── .github/workflows/
+│   ├── screenshot-diff.yml                ← ad-hoc 2-URL
+│   ├── screenshot-diff-nala.yml           ← single-runner sequential (legacy)
+│   └── screenshot-diff-nala-parallel.yml  ← MAIN: 3-shard matrix with bundled merge
+├── nala/features/visual/
+│   ├── sot.bacom.yml                      ← per-site data files
+│   ├── sot.bacom-blog.yml
+│   ├── sot.cc.yml
+│   ├── sot.dc.yml
+│   ├── sot.express.yml
+│   ├── sot.graybox-poc.yml
+│   ├── sot.homepage.yml
+│   └── sot.run.js                         ← driver (read yml → capture → diff → upload)
+└── tools/screenshot-diff/
+    ├── lib/
+    │   ├── config.js                      ← env-driven S3 + path config
+    │   ├── take.js                        ← Playwright screenshot helpers (with beforeBeta hook)
+    │   ├── compare.mjs                    ← pixel diff
+    │   ├── merge.js                       ← consolidate results-*.json shards
+    │   ├── utils.js                       ← path validation, comparator (lazy-loaded)
+    │   ├── upload-s3.js                   ← S3 PUT (parameterized)
+    │   ├── upload-one.js                  ← single-file upload (used by merge step)
+    │   └── clean-s3.js                    ← interactive cleanup
+    ├── run.js                             ← ad-hoc 2-URL driver
+    ├── setup-runner.sh                    ← Mac Mini bootstrap
+    ├── README.md                          ← user-facing docs
+    └── PROPOSAL.md                        ← this file
 ```
 
 ## References
 
-- Source: [`adobecom/nala/libs/screenshot/`](https://github.com/adobecom/nala/tree/main/libs/screenshot)
-- Target branch: [`JackySun9/milo` `screenshot-diff-tool`](https://github.com/JackySun9/milo/tree/screenshot-diff-tool/tools/screenshot-diff)
-- Self-hosted runner setup: [Adobe wiki page](https://wiki.corp.adobe.com/spaces/adobedotcom/pages/3715918184/Set+up+GitHub+Actions+Self-Hosted+Runner)
-- Tool README: [`tools/screenshot-diff/README.md`](./README.md)
+- **Branch (current state)**: [JackySun9/milo @ screenshot-diff-tool](https://github.com/JackySun9/milo/tree/screenshot-diff-tool)
+- **Workflow runs**: [Actions tab](https://github.com/JackySun9/milo/actions)
+- **Live results viewer**: [nala-auto.corp.adobe.com/imagediff/&lt;site&gt;](http://nala-auto.corp.adobe.com/imagediff/bacom)
+- **Source of original code**: [adobecom/nala/libs/screenshot/](https://github.com/adobecom/nala/tree/main/libs/screenshot)
+- **Self-hosted runner setup wiki**: [internal](https://wiki.corp.adobe.com/spaces/adobedotcom/pages/3715918184/Set+up+GitHub+Actions+Self-Hosted+Runner)
