@@ -1,16 +1,15 @@
 name: Screenshot Diff (Parallel Matrix)
 
-# Runs visual regression for one site's data file across all viewports in
+# Runs visual regression for one site's data file across 3 viewports in
 # parallel on the self-hosted Mac Mini pool, then a fan-in merge job
-# consolidates the per-shard results.json files into a single one that
+# consolidates the per-viewport results.json files into a single one that
 # nala-auto reads.
 #
-# Matrix is matrix.include rather than a plain product, so the slowest
-# viewport (iphone) can be split across two shards. Total shape:
-#   capture-chrome        full URL list
-#   capture-ipad          full URL list
-#   capture-iphone-1of2   first half of URL list
-#   capture-iphone-2of2   second half
+# 3-shard matrix (one job per viewport) — uses 3 of the 6 runners per
+# site, so 2 sites can run concurrently. Iphone is the slowest viewport
+# but splitting it across more shards (we tried 4-shard with iphone-1of2
+# + iphone-2of2) only helps when you have ≥8 runners; with 6 it
+# starves the merge jobs.
 #
 # Result URL after completion:
 #   http://nala-auto.corp.adobe.com/imagediff/<site>
@@ -31,23 +30,11 @@ on:
 
 jobs:
   capture:
-    name: capture-${{ matrix.shard_name }}
+    name: capture-${{ matrix.viewport }}
     strategy:
       fail-fast: false  # don't kill other viewports if one fails
       matrix:
-        include:
-          - viewport: chrome
-            shard: '1/1'
-            shard_name: chrome
-          - viewport: ipad
-            shard: '1/1'
-            shard_name: ipad
-          - viewport: iphone
-            shard: '1/2'
-            shard_name: iphone-1of2
-          - viewport: iphone
-            shard: '2/2'
-            shard_name: iphone-2of2
+        viewport: [chrome, ipad, iphone]
     runs-on: [self-hosted, macOS, screendiff]
     timeout-minutes: 30
 
@@ -61,28 +48,17 @@ jobs:
           node-version: '20'
           cache: 'npm'
 
-      - name: Cache node_modules
-        id: node-modules-cache
-        uses: actions/cache@v4
-        with:
-          path: node_modules
-          key: ${{ runner.os }}-node-modules-${{ hashFiles('package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-node-modules-
-
-      - name: Install milo dependencies (cache miss only)
-        if: steps.node-modules-cache.outputs.cache-hit != 'true'
+      - name: Install milo dependencies
         run: npm ci
 
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
 
-      - name: Run visual diff (this shard only)
+      - name: Run visual diff (this viewport only)
         env:
           SITE: ${{ inputs.site }}
           VIEWPORTS: ${{ matrix.viewport }}
-          SHARD: ${{ matrix.shard }}
-          SHARD_NAME: ${{ matrix.shard_name }}
+          SHARD_NAME: ${{ matrix.viewport }}
           MILO_LIBS: ${{ inputs.milo_libs }}
           S3_ACCESS_KEY_ID: ${{ secrets.S3ACCESSKEY }}
           S3_SECRET_ACCESS_KEY: ${{ secrets.S3SECRETKEY }}
@@ -92,8 +68,8 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: results-${{ inputs.site }}-${{ matrix.shard_name }}
-          path: screenshots/${{ inputs.site }}/results-${{ matrix.shard_name }}.json
+          name: results-${{ inputs.site }}-${{ matrix.viewport }}
+          path: screenshots/${{ inputs.site }}/results-${{ matrix.viewport }}.json
           retention-days: 7
 
   merge:
@@ -113,23 +89,16 @@ jobs:
           node-version: '20'
           cache: 'npm'
 
-      - name: Cache node_modules
-        id: node-modules-cache
-        uses: actions/cache@v4
-        with:
-          path: node_modules
-          key: ${{ runner.os }}-node-modules-${{ hashFiles('package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-node-modules-
-
-      - name: Install milo dependencies (cache miss only)
-        if: steps.node-modules-cache.outputs.cache-hit != 'true'
-        run: npm ci
+      # Merge only needs @aws-sdk/client-s3 (for upload-one.js) — skip the
+      # full milo `npm ci` which is ~60 s. Direct install of one dep is
+      # ~5 s on warm cache.
+      - name: Install merge deps only
+        run: npm install --no-save --no-package-lock @aws-sdk/client-s3
 
       - name: Pull shard JSONs from S3 (via nala-auto proxy)
         run: |
           mkdir -p screenshots/${{ inputs.site }}
-          for shard in chrome ipad iphone-1of2 iphone-2of2; do
+          for shard in chrome ipad iphone; do
             url="http://nala-auto.corp.adobe.com/api/milo/screenshots/${{ inputs.site }}/results-$shard.json"
             if curl -sSf -o "screenshots/${{ inputs.site }}/results-$shard.json" "$url"; then
               echo "✓ Pulled $shard shard"

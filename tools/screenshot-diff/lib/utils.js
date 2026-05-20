@@ -1,9 +1,18 @@
-// eslint-disable-next-line import/no-extraneous-dependencies
-const { getComparator } = require('playwright-core/lib/utils');
-
 const fs = require('fs');
 const path = require('path');
 const config = require('./config.js');
+
+// `getComparator` is from a private playwright-core path — only loaded when
+// compareScreenshots is actually called. Lets merge.js (which only needs
+// validatePath) avoid pulling in playwright-core as a hard dependency.
+let getComparator;
+function loadComparator() {
+  if (!getComparator) {
+    // eslint-disable-next-line import/no-extraneous-dependencies, global-require
+    ({ getComparator } = require('playwright-core/lib/utils'));
+  }
+  return getComparator;
+}
 
 /**
  * Resolve a path and assert it stays inside the configured base directory.
@@ -61,7 +70,7 @@ const COMPARE_OPTS = { threshold: 0.2, maxDiffPixelRatio: 0.01 };
 
 function compareScreenshots(stableArray, betaArray) {
   const results = [];
-  const comparator = getComparator('image/png');
+  const comparator = loadComparator()('image/png');
   for (let i = 0; i < stableArray.length; i += 1) {
     if (betaArray[i].a.slice(-10) === stableArray[i].a.slice(-10)) {
       const result = {};
