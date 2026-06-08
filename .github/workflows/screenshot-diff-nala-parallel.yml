@@ -80,23 +80,37 @@ jobs:
       # already uploaded to S3). No separate merge job → no queue gap.
       # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-      - name: Wait for chrome + ipad shards on S3
+      - name: Wait for sibling chrome + ipad jobs in THIS run to finish
+        if: matrix.viewport == 'iphone' && success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Crucial: we wait on the SIBLING JOBS in this run, not on the
+          # presence of files on S3. The S3 path has stale shards from
+          # previous runs — a presence-only check pulls last-run data.
+          for i in $(seq 1 60); do
+            done_count=$(gh api "repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/jobs" \
+              --jq '[.jobs[] | select(.name | startswith("capture-chrome") or startswith("capture-ipad")) | select(.status == "completed")] | length')
+            if [ "$done_count" = "2" ]; then
+              echo "✓ chrome + ipad capture jobs completed"
+              break
+            fi
+            echo "Waiting ($done_count/2 sibling jobs done) ..."
+            sleep 10
+          done
+
+      - name: Pull fresh chrome + ipad shards from S3
         if: matrix.viewport == 'iphone' && success()
         run: |
           SITE="${{ inputs.site }}"
           mkdir -p "screenshots/$SITE"
           for shard in chrome ipad; do
-            attempts=0
-            until curl -sSf -o "screenshots/$SITE/results-$shard.json" \
-                    "http://nala-auto.corp.adobe.com/api/milo/screenshots/$SITE/results-$shard.json"; do
-              attempts=$((attempts+1))
-              if [ "$attempts" -gt 60 ]; then
-                echo "::warning::Gave up waiting for $shard shard after ~5 min — merge will proceed without it"
-                break
-              fi
-              sleep 5
-            done
-            echo "✓ $shard shard ready (or skipped)"
+            if curl -sSf -o "screenshots/$SITE/results-$shard.json" \
+                 "http://nala-auto.corp.adobe.com/api/milo/screenshots/$SITE/results-$shard.json"; then
+              echo "✓ pulled $shard shard"
+            else
+              echo "::warning::No $shard shard on S3 — merge will proceed without it"
+            fi
           done
 
       - name: Merge shards into results.json
