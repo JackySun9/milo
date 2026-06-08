@@ -88,9 +88,19 @@ jobs:
           # Crucial: we wait on the SIBLING JOBS in this run, not on the
           # presence of files on S3. The S3 path has stale shards from
           # previous runs — a presence-only check pulls last-run data.
+          # Use curl + python3 directly (no `gh` CLI on the Mac runner).
           for i in $(seq 1 60); do
-            done_count=$(gh api "repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/jobs" \
-              --jq '[.jobs[] | select(.name | startswith("capture-chrome") or startswith("capture-ipad")) | select(.status == "completed")] | length')
+            done_count=$(curl -sS \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/jobs" \
+              | python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+print(len([j for j in d.get('jobs', [])
+           if (j['name'].startswith('capture-chrome') or j['name'].startswith('capture-ipad'))
+           and j['status'] == 'completed']))
+")
             if [ "$done_count" = "2" ]; then
               echo "✓ chrome + ipad capture jobs completed"
               break
