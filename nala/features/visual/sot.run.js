@@ -29,13 +29,11 @@
 const { chromium, devices } = require('playwright');
 // eslint-disable-next-line import/no-extraneous-dependencies
 const { getComparator } = require('playwright-core/lib/utils');
-// eslint-disable-next-line import/no-extraneous-dependencies
-const yaml = require('js-yaml');
 const fs = require('fs');
-const path = require('path');
 const { takeTwo } = require('../../../tools/screenshot-diff/lib/take.js');
 const { validatePath } = require('../../../tools/screenshot-diff/lib/utils.js');
 const { uploadResultsDir } = require('../../../tools/screenshot-diff/lib/upload-s3.js');
+const { loadSiteData } = require('../../../tools/screenshot-diff/lib/load-data.js');
 const config = require('../../../tools/screenshot-diff/lib/config.js');
 
 // All viewports run on Chromium. We still apply Playwright's iPad / iPhone
@@ -216,12 +214,9 @@ async function main() {
     process.exit(1);
   }
 
-  const dataPath = path.join(__dirname, `sot.${site}.yml`);
-  if (!fs.existsSync(dataPath)) {
-    console.error(`No data file at ${dataPath}. Add it first.`);
-    process.exit(1);
-  }
-  const raw = yaml.load(fs.readFileSync(dataPath, 'utf8'));
+  // Page list comes from the SharePoint-published sheet when reachable, otherwise
+  // the committed local sot.<site>.yml. See tools/screenshot-diff/lib/load-data.js.
+  const raw = await loadSiteData(site, { dir: __dirname });
   // `__config__` is a reserved top-level key for per-site options.
   // Everything else is a URL entry.
   const yamlConfig = raw.__config__ || {};
