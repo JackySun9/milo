@@ -1,173 +1,93 @@
-# UAR / Brand Concierge visual regression
+# UAR / Brand Concierge — block variant visual regression
 #
-# Source: UAR/BC release tracker — every page where the BC entry blade,
-# floating banner, or hero variant is currently live, paused, or planned.
+# Source: BC block variant catalog (Confluence — Jacky Sun).
+# One representative URL per BC block variant. Many real product
+# pages share the same block variant (e.g. 5 different CC category
+# pages all use "basic inline + floating button"), so we test the
+# variant once instead of every page that consumes it.
 #
-# Pattern (milolibs mode):
-#   a: <stage URL>                       — current prod milo on stage page
-#   b: <stage URL>?milolibs=stage        — milo-stage candidate on stage page
-# Diff = what milo-stage will change for UAR/BC pages when it ships to prod.
+# Comparison modes:
+#   • Milolibs (string)      — A=page, B=page?milolibs=stage
+#     For real product pages — tests what stage milo changes for
+#     pages that already render BC.
+#   • Explicit pair (a/b)    — for block fragments where we
+#     explicitly compare main--milo vs stage--milo, or pages using a
+#     non-default milolibs branch (e.g. bc-floating-input-update,
+#     site-redesign-foundation, webclient=baseStage).
 #
-# UAR has lazy entry-blade injection (Target treatment + IntersectionObserver-
-# driven personalization). Without scrolling, screenshots capture the page
-# before BC mounts. Scroll-then-screenshot is required.
-#
-# NOTE: BC may not appear in incognito-style headless sessions without
-# ?promoid=brandcon (internal employee override — see release tracker).
-# If diffs come back empty for BC-specific elements, append &promoid=brandcon
-# to every URL below and re-run.
+# Note: scroll wait strategy is required — BC entry blade is lazy-
+# injected (Target treatment + IntersectionObserver). Without
+# scrolling, screenshots capture the page before BC mounts.
 __config__:
   waitStrategy: scroll
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# M1 — Adobe.com CCO + category pages (LIVE 10/27/2025, 100%)
-# In-line entry blade
+# Real product pages (milolibs mode — A = stage URL, B = + ?milolibs=stage)
+# One representative page per variant
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-'acom-cco': 'https://www.stage.adobe.com/creativecloud.html'
-'acom-cco-campaign-pricing': 'https://www.stage.adobe.com/creativecloud/adobe/campaign/pricing.html'
-'acom-cco-photography-apps': 'https://www.stage.adobe.com/creativecloud/photography/apps.html'
-'acom-cco-design': 'https://www.stage.adobe.com/creativecloud/design.html'
-'acom-cco-video': 'https://www.stage.adobe.com/creativecloud/video.html'
-'acom-cco-illustration': 'https://www.stage.adobe.com/creativecloud/illustration.html'
+# Basic Inline — stage adobe.com /cc-shared fragment (the canonical
+# inline blade host)
+'basic-inline': 'https://www.stage.adobe.com/cc-shared/fragments/uar/brand-concierge/brand-concierge'
+
+# Basic inline light — BACOM Brand Concierge product page
+'basic-inline-light': 'https://business.stage.adobe.com/products/brand-concierge.html'
+
+# Basic hero — BACOM home
+'basic-hero': 'https://business.stage.adobe.com/'
+
+# 404 page — adobe.com error page
+'bc-404': 'https://www.stage.adobe.com/error-pages/404.html'
+
+# Basic inline + floating button (representative: design — also
+# covers /creativecloud/adobe/campaign/pricing, photography/apps,
+# video, illustration; all share this variant)
+'inline-floating-button': 'https://www.stage.adobe.com/creativecloud/design.html'
+
+# Floating button delay — BACOM b2b-marketing solution page
+'floating-button-delay': 'https://business.stage.adobe.com/solutions/b2b-marketing.html'
+
+# Floating anchor hide — adobe.com homepage variant
+'floating-anchor-hide': 'https://www.stage.adobe.com/'
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# M1.5 — Adobe.com Homepage + Error/EOL pages (LIVE 1/8/2026, 100%)
-# Hero variant (HP) + In-line entry blade (404, Flash EOL)
+# BC block fragments (no real page yet OR a non-default milolibs branch)
+# Explicit {a, b} — main milo vs stage milo, or prod vs feature branch
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-'acom-home': 'https://www.stage.adobe.com/'
-'acom-404': 'https://www.stage.adobe.com/error-pages/404.html'
-'acom-flash-eol': 'https://www.stage.adobe.com/products/flashplayer/end-of-life-alternative.html'
+# Hero + floating button (block fragment only — not on a real page yet)
+'hero-floating-button':
+  a: 'https://main--milo--adobecom.aem.live/drafts/nala/blocks/brand-concierge/bc-hero-floating-button'
+  b: 'https://stage--milo--adobecom.aem.live/drafts/nala/blocks/brand-concierge/bc-hero-floating-button'
 
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# M1.5 — Special Offers (PAUSED — placement returns post-promos)
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Floating button only (block fragment only)
+'floating-button-only':
+  a: 'https://main--milo--adobecom.aem.live/drafts/nala/blocks/brand-concierge/bc-floating-button-only'
+  b: 'https://stage--milo--adobecom.aem.live/drafts/nala/blocks/brand-concierge/bc-floating-button-only'
 
-'acom-special-offers': 'https://www.stage.adobe.com/products/special-offers.html'
+# webclient=baseStage param — block fragment + extra query
+'webclient-basestage':
+  a: 'https://main--milo--adobecom.aem.live/drafts/nala/blocks/brand-concierge/brand-concierge?webclient=baseStage'
+  b: 'https://stage--milo--adobecom.aem.live/drafts/nala/blocks/brand-concierge/brand-concierge?webclient=baseStage'
 
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# M1.6 — BACOM Brand Concierge product page (LIVE 11/14/2025, 100%)
-# Deployed directly on page (not via Target)
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# c2 dark (aem.page, different drafts folder /colloyd/)
+'c2-dark':
+  a: 'https://main--milo--adobecom.aem.page/drafts/colloyd/brand-concierge/bc-floating-button-c2-dark'
+  b: 'https://stage--milo--adobecom.aem.page/drafts/colloyd/brand-concierge/bc-floating-button-c2-dark'
 
-'bacom-brand-concierge': 'https://business.stage.adobe.com/products/brand-concierge.html'
+# BACOM new floating field — light variant.
+# Tests milo feature branch `bc-floating-input-update` (B) against
+# current prod milo (A) on the same bacom block fragment.
+'bacom-floating-field-light':
+  a: 'https://main--da-bacom--adobecom.aem.live/drafts/slavin/brand-concierge/home-light'
+  b: 'https://main--da-bacom--adobecom.aem.live/drafts/slavin/brand-concierge/home-light?milolibs=bc-floating-input-update'
 
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# M2 — Adobe.com JDIs (LIVE 3/30/2026, 100%)
-# In-line entry blade
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# BACOM new floating field — dark variant
+'bacom-floating-field-dark':
+  a: 'https://main--da-bacom--adobecom.aem.live/drafts/slavin/brand-concierge/home-dark'
+  b: 'https://main--da-bacom--adobecom.aem.live/drafts/slavin/brand-concierge/home-dark?milolibs=bc-floating-input-update'
 
-'acom-cc-features': 'https://www.stage.adobe.com/creativecloud/features.html'
-'acom-downloads': 'https://www.stage.adobe.com/downloads.html'
-
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# M2 — Adobe.com slow ramps (LIVE 3/30/2026, 50/50)
-# CVR-sensitive pages — separate paths from the M1 CCO pricing page
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-'acom-cc-campaign-pricing': 'https://www.stage.adobe.com/creativecloud/campaign/pricing.html'
-'acom-cc-photography-compare-plans': 'https://www.stage.adobe.com/creativecloud/photography/compare-plans.html'
-
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# M2 — Adobe.com BC during site redesign Wave 2 (PLANNING 6/15–7/13)
-# BC will be in the challenger experience of ACE1205
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-'acom-acrobat': 'https://www.stage.adobe.com/acrobat.html'
-'acom-acrobat-studio': 'https://www.stage.adobe.com/acrobat/acrobat-studio.html'
-# BizPro Hub: URL TBD — add when product team finalizes
-
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# M2 — Adobe.com Students (PLANNING — needs surface awareness)
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-'acom-cc-students': 'https://www.stage.adobe.com/creativecloud/buy/students.html'
-'acom-acrobat-students': 'https://www.stage.adobe.com/acrobat/pricing/students.html'
-
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# M2 — Adobe.com CC Teams + SMB / Special Offers (PLANNING)
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-'acom-cc-business': 'https://www.stage.adobe.com/creativecloud/business.html'
-
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# M2 — BACOM Floating Banner (~52 pages, IN PROGRESS — launch 4/20/2026)
-# Top-level products + product detail pages
-# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-'bacom-ai': 'https://business.stage.adobe.com/ai.html'
-'bacom-ai-adobe-genai': 'https://business.stage.adobe.com/ai/adobe-genai.html'
-'bacom-blog': 'https://business.stage.adobe.com/blog/'
-'bacom-customer-success-stories': 'https://business.stage.adobe.com/customer-success-stories.html'
-'bacom-products': 'https://business.stage.adobe.com/products.html'
-
-# BACOM — Acrobat / Creative Cloud / Express / Frame.io
-'bacom-acrobat-business': 'https://business.stage.adobe.com/products/acrobat-business.html'
-'bacom-creativecloud-business': 'https://business.stage.adobe.com/products/creativecloud-business.html'
-'bacom-express-business': 'https://business.stage.adobe.com/products/express-business.html'
-'bacom-frameio-business': 'https://business.stage.adobe.com/products/frameio-business.html'
-
-# BACOM — Analytics
-'bacom-adobe-analytics': 'https://business.stage.adobe.com/products/adobe-analytics.html'
-'bacom-customer-journey-analytics': 'https://business.stage.adobe.com/products/adobe-analytics/customer-journey-analytics.html'
-'bacom-cja-b2b-edition': 'https://business.stage.adobe.com/products/adobe-analytics/customer-journey-analytics-b2b-edition.html'
-
-# BACOM — Brand Concierge sub-pages (5)
-'bacom-bc-brand-aligned-conversations': 'https://business.stage.adobe.com/products/brand-concierge/brand-aligned-conversations.html'
-'bacom-bc-customer-lifetime-value': 'https://business.stage.adobe.com/products/brand-concierge/increase-customer-lifetime-value.html'
-'bacom-bc-intent-based-experience': 'https://business.stage.adobe.com/products/brand-concierge/intent-based-experience-orchestration.html'
-'bacom-bc-knowledge-support': 'https://business.stage.adobe.com/products/brand-concierge/knowledge-support-and-assistance.html'
-'bacom-bc-product-discovery': 'https://business.stage.adobe.com/products/brand-concierge/product-discovery-and-consideration.html'
-
-# BACOM — Brand Intelligence + Commerce + CX Engagement
-'bacom-brand-intelligence': 'https://business.stage.adobe.com/products/brand-intelligence.html'
-'bacom-commerce': 'https://business.stage.adobe.com/products/commerce.html'
-'bacom-cx-engagement-studio': 'https://business.stage.adobe.com/products/cx-engagement-studio-for-teams.html'
-
-# BACOM — Experience Manager
-'bacom-aem': 'https://business.stage.adobe.com/products/experience-manager/adobe-experience-manager.html'
-'bacom-aem-assets': 'https://business.stage.adobe.com/products/experience-manager/assets.html'
-'bacom-aem-sites': 'https://business.stage.adobe.com/products/experience-manager/sites.html'
-
-# BACOM — Experience Platform
-'bacom-aep': 'https://business.stage.adobe.com/products/experience-platform/adobe-experience-platform.html'
-'bacom-aep-agent-orchestrator': 'https://business.stage.adobe.com/products/experience-platform/agent-orchestrator.html'
-
-# BACOM — Firefly (5)
-'bacom-firefly-business': 'https://business.stage.adobe.com/products/firefly-business.html'
-'bacom-firefly-custom-models': 'https://business.stage.adobe.com/products/firefly-business/custom-models.html'
-'bacom-firefly-creative-production': 'https://business.stage.adobe.com/products/firefly-business/firefly-creative-production.html'
-'bacom-firefly-foundry': 'https://business.stage.adobe.com/products/firefly-business/firefly-foundry.html'
-'bacom-firefly-services': 'https://business.stage.adobe.com/products/firefly-business/firefly-services.html'
-
-# BACOM — GenStudio (3)
-'bacom-genstudio': 'https://business.stage.adobe.com/products/genstudio.html'
-'bacom-genstudio-content-marketing': 'https://business.stage.adobe.com/products/genstudio/content-marketing.html'
-'bacom-genstudio-performance-marketing': 'https://business.stage.adobe.com/products/genstudio/performance-marketing.html'
-
-# BACOM — Journey Optimizer + LLM Optimizer + Marketo + Workfront
-'bacom-journey-optimizer': 'https://business.stage.adobe.com/products/journey-optimizer.html'
-'bacom-journey-optimizer-b2b': 'https://business.stage.adobe.com/products/journey-optimizer-b2b-edition.html'
-'bacom-llm-optimizer': 'https://business.stage.adobe.com/products/llm-optimizer.html'
-'bacom-marketo': 'https://business.stage.adobe.com/products/marketo.html'
-'bacom-workfront': 'https://business.stage.adobe.com/products/workfront.html'
-
-# BACOM — RTCDP + Sign
-'bacom-rtcdp': 'https://business.stage.adobe.com/products/real-time-customer-data-platform/rtcdp.html'
-'bacom-sign-solutions': 'https://business.stage.adobe.com/products/sign-solutions.html'
-
-# BACOM — Resources
-'bacom-resources': 'https://business.stage.adobe.com/resources/main.html'
-'bacom-creative-trends-report': 'https://business.stage.adobe.com/resources/creative-trends-report.html'
-'bacom-digital-trends-report': 'https://business.stage.adobe.com/resources/digital-trends-report.html'
-'bacom-it-starts-with-adobe': 'https://business.stage.adobe.com/resources/it-starts-with-adobe.html'
-'bacom-state-of-performance-marketing': 'https://business.stage.adobe.com/resources/sdk/state-of-performance-marketing.html'
-'bacom-cx-ai-maturity-index': 'https://business.stage.adobe.com/resources/customer-experience-ai-maturity-index.html'
-
-# BACOM — Solutions (5)
-'bacom-b2b-marketing': 'https://business.stage.adobe.com/solutions/b2b-marketing.html'
-'bacom-brand-visibility': 'https://business.stage.adobe.com/solutions/brand-visibility.html'
-'bacom-content-supply-chain': 'https://business.stage.adobe.com/solutions/content-supply-chain.html'
-'bacom-customer-engagement': 'https://business.stage.adobe.com/solutions/customer-engagement.html'
-'bacom-cx-orchestration': 'https://business.stage.adobe.com/solutions/customer-experience-orchestration.html'
+# DC BizPro Hub — site-redesign-foundation milo branch
+'dc-bizpro-hub':
+  a: 'https://main--da-dc--adobecom.aem.page/dc-shared/fragments/tests/2026/q2/ace1205/fragments/ace1205-bizpro-hub'
+  b: 'https://main--da-dc--adobecom.aem.page/dc-shared/fragments/tests/2026/q2/ace1205/fragments/ace1205-bizpro-hub?milolibs=site-redesign-foundation'
