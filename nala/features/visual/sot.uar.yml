@@ -30,8 +30,17 @@ __config__:
 # inline blade host)
 'basic-inline': 'https://www.stage.adobe.com/cc-shared/fragments/uar/brand-concierge/brand-concierge'
 
+# Basic Inline — direct block fragment comparison (main milo vs stage milo)
+'basic-inline-block':
+  a: 'https://main--milo--adobecom.aem.live/drafts/nala/blocks/brand-concierge/brand-concierge'
+  b: 'https://stage--milo--adobecom.aem.live/drafts/nala/blocks/brand-concierge/brand-concierge'
+
 # Basic inline light — BACOM Brand Concierge product page
 'basic-inline-light': 'https://business.stage.adobe.com/products/brand-concierge.html'
+
+# Basic inline light — also used on Adobe.com CCO (different layout
+# context: marketing landing vs. product detail)
+'basic-inline-light-cco': 'https://www.stage.adobe.com/creativecloud.html'
 
 # Basic hero — BACOM home
 'basic-hero': 'https://business.stage.adobe.com/'
@@ -40,12 +49,20 @@ __config__:
 'bc-404': 'https://www.stage.adobe.com/error-pages/404.html'
 
 # Basic inline + floating button (representative: design — also
-# covers /creativecloud/adobe/campaign/pricing, photography/apps,
-# video, illustration; all share this variant)
+# covers /creativecloud/adobe/campaign/pricing, video, illustration;
+# all share this variant)
 'inline-floating-button': 'https://www.stage.adobe.com/creativecloud/design.html'
+
+# Basic inline + floating button — Photography Apps (different
+# content category, same variant)
+'inline-floating-button-photo': 'https://www.stage.adobe.com/creativecloud/photography/apps.html'
 
 # Floating button delay — BACOM b2b-marketing solution page
 'floating-button-delay': 'https://business.stage.adobe.com/solutions/b2b-marketing.html'
+
+# Floating button delay — BACOM AI top-level page (different page
+# template than solutions/*)
+'floating-button-delay-ai': 'https://business.stage.adobe.com/ai.html'
 
 # Floating anchor hide — adobe.com homepage variant
 'floating-anchor-hide': 'https://www.stage.adobe.com/'
