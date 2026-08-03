@@ -33,6 +33,7 @@ on:
           - graybox-poc
           - homepage
           - uar
+          - max-2026-regression
       milo_libs:
         description: 'Query string appended to URL B (the candidate)'
         required: false
