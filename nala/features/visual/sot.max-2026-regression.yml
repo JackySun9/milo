@@ -1,0 +1,163 @@
+# MAX 2026 Floodgate Regression (MWPW-201418)
+#
+# Compares www.stage.adobe.com (through Akamai + Edge Worker) vs the
+# corresponding aem.live origin. Any diff = something Akamai/EW is doing.
+#
+# AC coverage:
+#   AC1  Non-FG paths render unchanged
+#   AC2  Edge Worker only executes on FG-tagged paths
+#   AC3  Direct-URL FG-pink access is gated (anonymous should not see FG)
+#
+# URL curation: adobe.com "approved products" list + JIRA MWPW-201418 samples.
+# Skipped from approved list (independent Akamai property, unaffected):
+#   stock.adobe.com, fonts.adobe.com, behance.net, frame.io,
+#   business.adobe.com/*, developer.adobe.com/*
+
+__config__:
+  waitStrategy: scroll
+
+# ─────────────────────────────────────────────────────────────────
+# CLASS 1 — Homepage (US + locale) — AC1
+# High-traffic + Akamai geo routing (most common bleed source)
+# ─────────────────────────────────────────────────────────────────
+
+homepage-us:
+  a: 'https://www.stage.adobe.com/?mep=off'
+  b: 'https://main--milo--adobecom.aem.live/?mep=off'
+
+homepage-uk:
+  a: 'https://www.stage.adobe.com/uk/?mep=off&akamaiLocale=uk'
+  b: 'https://main--milo--adobecom.aem.live/uk/?mep=off'
+
+homepage-de:
+  a: 'https://www.stage.adobe.com/de?akamaiLocale=de'
+  b: 'https://main--milo--adobecom.aem.live/de'
+
+homepage-jp:
+  a: 'https://www.stage.adobe.com/jp?akamaiLocale=jp'
+  b: 'https://main--milo--adobecom.aem.live/jp'
+
+homepage-fr:
+  a: 'https://www.stage.adobe.com/fr?akamaiLocale=fr'
+  b: 'https://main--milo--adobecom.aem.live/fr'
+
+# ─────────────────────────────────────────────────────────────────
+# CLASS 2 — Tier A products (highest-traffic, from approved list) — AC1
+# ─────────────────────────────────────────────────────────────────
+
+acrobat:
+  a: 'https://www.stage.adobe.com/acrobat.html'
+  b: 'https://main--milo--adobecom.aem.live/acrobat.html'
+
+acrobat-reader:
+  a: 'https://www.stage.adobe.com/acrobat/pdf-reader.html'
+  b: 'https://main--milo--adobecom.aem.live/acrobat/pdf-reader.html'
+
+creative-cloud:
+  a: 'https://www.stage.adobe.com/creativecloud.html'
+  b: 'https://main--milo--adobecom.aem.live/creativecloud.html'
+
+photoshop:
+  a: 'https://www.stage.adobe.com/products/photoshop.html'
+  b: 'https://main--milo--adobecom.aem.live/products/photoshop.html'
+
+illustrator:
+  a: 'https://www.stage.adobe.com/products/illustrator.html'
+  b: 'https://main--milo--adobecom.aem.live/products/illustrator.html'
+
+lightroom:
+  a: 'https://www.stage.adobe.com/products/photoshop-lightroom.html'
+  b: 'https://main--milo--adobecom.aem.live/products/photoshop-lightroom.html'
+
+premiere:
+  a: 'https://www.stage.adobe.com/products/premiere.html'
+  b: 'https://main--milo--adobecom.aem.live/products/premiere.html'
+
+after-effects:
+  a: 'https://www.stage.adobe.com/products/aftereffects.html'
+  b: 'https://main--milo--adobecom.aem.live/products/aftereffects.html'
+
+firefly:
+  a: 'https://www.stage.adobe.com/products/firefly.html'
+  b: 'https://main--milo--adobecom.aem.live/products/firefly.html'
+
+express:
+  a: 'https://www.stage.adobe.com/express/?martech=off'
+  b: 'https://main--milo--adobecom.aem.live/express/'
+
+# ─────────────────────────────────────────────────────────────────
+# CLASS 3 — Tier B products (edge cases / new pages) — AC1
+# ─────────────────────────────────────────────────────────────────
+
+indesign:
+  a: 'https://www.stage.adobe.com/products/indesign.html'
+  b: 'https://main--milo--adobecom.aem.live/products/indesign.html'
+
+fresco:
+  a: 'https://www.stage.adobe.com/products/fresco.html'
+  b: 'https://main--milo--adobecom.aem.live/products/fresco.html'
+
+substance-3d-painter:
+  a: 'https://www.stage.adobe.com/products/substance3d-painter.html'
+  b: 'https://main--milo--adobecom.aem.live/products/substance3d-painter.html'
+
+# NEW page (flagged in approved list) — brand-new is higher risk
+premiere-mobile:
+  a: 'https://www.stage.adobe.com/products/premiere/app.html'
+  b: 'https://main--milo--adobecom.aem.live/products/premiere/app.html'
+
+# Beta page — edge case
+substance-3d-viewer-beta:
+  a: 'https://www.stage.adobe.com/products/substance3d/apps/viewer.html'
+  b: 'https://main--milo--adobecom.aem.live/products/substance3d/apps/viewer.html'
+
+# ─────────────────────────────────────────────────────────────────
+# CLASS 4 — Plans / Pricing (high-conversion) — AC1
+# ─────────────────────────────────────────────────────────────────
+
+cc-all-apps:
+  a: 'https://www.stage.adobe.com/creativecloud/all-apps.html'
+  b: 'https://main--milo--adobecom.aem.live/creativecloud/all-apps.html'
+
+cc-students:
+  a: 'https://www.stage.adobe.com/creativecloud/buy/students.html'
+  b: 'https://main--milo--adobecom.aem.live/creativecloud/buy/students.html'
+
+acrobat-pricing:
+  a: 'https://www.stage.adobe.com/acrobat/pricing.html'
+  b: 'https://main--milo--adobecom.aem.live/acrobat/pricing.html'
+
+# ─────────────────────────────────────────────────────────────────
+# CLASS 5 — 🚨 MAX 2026 FG paths (anonymous) — AC2 + AC3
+# From JIRA MWPW-201418. Anonymous user should see aem.live default
+# (i.e. NOT the FG-pink tree). If stage shows FG content, gate is broken.
+# TODO confirm aem.live repo for /max/2026/* — 'events' is a guess.
+# ─────────────────────────────────────────────────────────────────
+
+max-2026-opening-keynote-anon:
+  a: 'https://www.stage.adobe.com/max/2026/sessions/opening-keynote-gs1-test.html'
+  b: 'https://main--events--adobecom.aem.live/max/2026/sessions/opening-keynote-gs1-test.html'
+
+max-2026-max-sneaks-anon:
+  a: 'https://www.stage.adobe.com/max/2026/sessions/max-sneaks-test.html'
+  b: 'https://main--events--adobecom.aem.live/max/2026/sessions/max-sneaks-test.html'
+
+max-2026-fg-only-page-anon:
+  a: 'https://www.stage.adobe.com/max/2026/drafts/sabya/floodgate-test-page.html'
+  b: 'https://main--events--adobecom.aem.live/max/2026/drafts/sabya/floodgate-test-page.html'
+
+max-2026-exists-only-default-anon:
+  a: 'https://www.stage.adobe.com/max/2026/drafts/sabya/flood-test-exists-only-in-default.html'
+  b: 'https://main--events--adobecom.aem.live/max/2026/drafts/sabya/flood-test-exists-only-in-default.html'
+
+# ─────────────────────────────────────────────────────────────────
+# CLASS 6 — Adjacent MAX (non-FG) — AC1 邻近路径不被误触发
+# ─────────────────────────────────────────────────────────────────
+
+max-html-root:
+  a: 'https://www.stage.adobe.com/max.html'
+  b: 'https://main--events--adobecom.aem.live/max.html'
+
+max-2025-legacy:
+  a: 'https://www.stage.adobe.com/max/2025/keynote.html'
+  b: 'https://main--events--adobecom.aem.live/max/2025/keynote.html'

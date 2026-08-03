@@ -30,6 +30,7 @@ on:
           - graybox-poc
           - homepage
           - uar
+          - max-2026-regression
       viewports:
         description: 'Viewports (comma-separated)'
         required: false
