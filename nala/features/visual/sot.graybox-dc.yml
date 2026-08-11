@@ -1,0 +1,34 @@
+# Graybox PoC (dc): poc-one + poc-two — a=aem.reviews preview vs b=graybox publish (.html)
+__config__:
+  waitStrategy: scroll
+
+'pocone-business':
+  a: 'https://da-dc-poc-one--main--da-dc--adobecom.aem.reviews/acrobat/business'
+  b: 'https://da-dc-poc-one.graybox.adobe.com/acrobat/business.html'
+'pocone-business-sign':
+  a: 'https://da-dc-poc-one--main--da-dc--adobecom.aem.reviews/acrobat/business/sign'
+  b: 'https://da-dc-poc-one.graybox.adobe.com/acrobat/business/sign.html'
+'pocone-ai-chat-pdf':
+  a: 'https://da-dc-poc-one--main--da-dc--adobecom.aem.reviews/acrobat/online/ai-chat-pdf'
+  b: 'https://da-dc-poc-one.graybox.adobe.com/acrobat/online/ai-chat-pdf.html'
+'pocone-pdf-editor':
+  a: 'https://da-dc-poc-one--main--da-dc--adobecom.aem.reviews/acrobat/online/pdf-editor'
+  b: 'https://da-dc-poc-one.graybox.adobe.com/acrobat/online/pdf-editor.html'
+'pocone-pdf-to-word':
+  a: 'https://da-dc-poc-one--main--da-dc--adobecom.aem.reviews/acrobat/online/pdf-to-word'
+  b: 'https://da-dc-poc-one.graybox.adobe.com/acrobat/online/pdf-to-word.html'
+'poctwo-business':
+  a: 'https://da-dc-poc-two--main--da-dc--adobecom.aem.reviews/acrobat/business'
+  b: 'https://da-dc-poc-two.graybox.adobe.com/acrobat/business.html'
+'poctwo-business-sign':
+  a: 'https://da-dc-poc-two--main--da-dc--adobecom.aem.reviews/acrobat/business/sign'
+  b: 'https://da-dc-poc-two.graybox.adobe.com/acrobat/business/sign.html'
+'poctwo-ai-chat-pdf':
+  a: 'https://da-dc-poc-two--main--da-dc--adobecom.aem.reviews/acrobat/online/ai-chat-pdf'
+  b: 'https://da-dc-poc-two.graybox.adobe.com/acrobat/online/ai-chat-pdf.html'
+'poctwo-pdf-editor':
+  a: 'https://da-dc-poc-two--main--da-dc--adobecom.aem.reviews/acrobat/online/pdf-editor'
+  b: 'https://da-dc-poc-two.graybox.adobe.com/acrobat/online/pdf-editor.html'
+'poctwo-pdf-to-word':
+  a: 'https://da-dc-poc-two--main--da-dc--adobecom.aem.reviews/acrobat/online/pdf-to-word'
+  b: 'https://da-dc-poc-two.graybox.adobe.com/acrobat/online/pdf-to-word.html'

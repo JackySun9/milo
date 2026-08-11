@@ -1,0 +1,46 @@
+# Graybox PoC (upp): poc-one + poc-two — a=aem.reviews preview vs b=graybox publish (.html)
+__config__:
+  waitStrategy: scroll
+
+'pocone-nab-genstudio-mweb':
+  a: 'https://da-upp-poc-one--main--upp--adobecom.aem.reviews/drafts/04-02-25-nab-gen-studio-mweb/homepage/index-loggedout'
+  b: 'https://da-upp-poc-one.graybox.adobe.com/drafts/04-02-25-nab-gen-studio-mweb/homepage/index-loggedout.html'
+'pocone-snapshot-test1':
+  a: 'https://da-upp-poc-one--main--upp--adobecom.aem.reviews/homepage/drafts/denli/snapshot-test/test1'
+  b: 'https://da-upp-poc-one.graybox.adobe.com/homepage/drafts/denli/snapshot-test/test1.html'
+'pocone-fragment1':
+  a: 'https://da-upp-poc-one--main--upp--adobecom.aem.reviews/homepage/fragments/drafts/denli/fragment1'
+  b: 'https://da-upp-poc-one.graybox.adobe.com/homepage/fragments/drafts/denli/fragment1.html'
+'pocone-index-loggedout':
+  a: 'https://da-upp-poc-one--main--upp--adobecom.aem.reviews/homepage/index-loggedout'
+  b: 'https://da-upp-poc-one.graybox.adobe.com/homepage/index-loggedout.html'
+'pocone-ccm-ste-introductory':
+  a: 'https://da-upp-poc-one--main--upp--adobecom.aem.reviews/homepage/terms-conditions-pages/ccm-ste-introductory'
+  b: 'https://da-upp-poc-one.graybox.adobe.com/homepage/terms-conditions-pages/ccm-ste-introductory.html'
+'pocone-jp-index-loggedout':
+  a: 'https://da-upp-poc-one--main--upp--adobecom.aem.reviews/jp/homepage/index-loggedout'
+  b: 'https://da-upp-poc-one.graybox.adobe.com/jp/homepage/index-loggedout.html'
+'pocone-uk-index-loggedout':
+  a: 'https://da-upp-poc-one--main--upp--adobecom.aem.reviews/uk/homepage/index-loggedout'
+  b: 'https://da-upp-poc-one.graybox.adobe.com/uk/homepage/index-loggedout.html'
+'poctwo-nab-genstudio-mweb':
+  a: 'https://da-upp-poc-two--main--upp--adobecom.aem.reviews/drafts/04-02-25-nab-gen-studio-mweb/homepage/index-loggedout'
+  b: 'https://da-upp-poc-two.graybox.adobe.com/drafts/04-02-25-nab-gen-studio-mweb/homepage/index-loggedout.html'
+'poctwo-snapshot-test1':
+  a: 'https://da-upp-poc-two--main--upp--adobecom.aem.reviews/homepage/drafts/denli/snapshot-test/test1'
+  b: 'https://da-upp-poc-two.graybox.adobe.com/homepage/drafts/denli/snapshot-test/test1.html'
+'poctwo-fragment1':
+  a: 'https://da-upp-poc-two--main--upp--adobecom.aem.reviews/homepage/fragments/drafts/denli/fragment1'
+  b: 'https://da-upp-poc-two.graybox.adobe.com/homepage/fragments/drafts/denli/fragment1.html'
+'poctwo-index-loggedout':
+  a: 'https://da-upp-poc-two--main--upp--adobecom.aem.reviews/homepage/index-loggedout'
+  b: 'https://da-upp-poc-two.graybox.adobe.com/homepage/index-loggedout.html'
+'poctwo-ccm-ste-introductory':
+  a: 'https://da-upp-poc-two--main--upp--adobecom.aem.reviews/homepage/terms-conditions-pages/ccm-ste-introductory'
+  b: 'https://da-upp-poc-two.graybox.adobe.com/homepage/terms-conditions-pages/ccm-ste-introductory.html'
+'poctwo-jp-index-loggedout':
+  a: 'https://da-upp-poc-two--main--upp--adobecom.aem.reviews/jp/homepage/index-loggedout'
+  b: 'https://da-upp-poc-two.graybox.adobe.com/jp/homepage/index-loggedout.html'
+'poctwo-uk-index-loggedout':
+  a: 'https://da-upp-poc-two--main--upp--adobecom.aem.reviews/uk/homepage/index-loggedout'
+  b: 'https://da-upp-poc-two.graybox.adobe.com/uk/homepage/index-loggedout.html'

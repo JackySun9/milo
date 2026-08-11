@@ -1,0 +1,71 @@
+# Graybox PoC (cc): a=aem.reviews preview  vs  b=graybox publish (.html)
+# Fallback for the published sheet .../data/graybox-cc.json
+__config__:
+  waitStrategy: scroll
+
+'pocone-ai-overview':
+  a: 'https://da-cc-poc-one--main--da-cc--adobecom.aem.reviews/ai/overview'
+  b: 'https://da-cc-poc-one.graybox.adobe.com/ai/overview.html'
+'pocone-how-ccpro-steps-4up':
+  a: 'https://da-cc-poc-one--main--da-cc--adobecom.aem.reviews/cc-shared/fragments/business/teams/how-ccpro-steps-4up'
+  b: 'https://da-cc-poc-one.graybox.adobe.com/cc-shared/fragments/business/teams/how-ccpro-steps-4up.html'
+'pocone-creativecloud':
+  a: 'https://da-cc-poc-one--main--da-cc--adobecom.aem.reviews/creativecloud'
+  b: 'https://da-cc-poc-one.graybox.adobe.com/creativecloud.html'
+'pocone-creativecloud-design':
+  a: 'https://da-cc-poc-one--main--da-cc--adobecom.aem.reviews/creativecloud/design'
+  b: 'https://da-cc-poc-one.graybox.adobe.com/creativecloud/design.html'
+'pocone-creativecloud-video':
+  a: 'https://da-cc-poc-one--main--da-cc--adobecom.aem.reviews/creativecloud/video'
+  b: 'https://da-cc-poc-one.graybox.adobe.com/creativecloud/video.html'
+'pocone-de-creativecloud':
+  a: 'https://da-cc-poc-one--main--da-cc--adobecom.aem.reviews/de/creativecloud'
+  b: 'https://da-cc-poc-one.graybox.adobe.com/de/creativecloud.html'
+'pocone-testfragment01':
+  a: 'https://da-cc-poc-one--main--da-cc--adobecom.aem.reviews/drafts/xiasun/testfragment01'
+  b: 'https://da-cc-poc-one.graybox.adobe.com/drafts/xiasun/testfragment01.html'
+'pocone-testpage01':
+  a: 'https://da-cc-poc-one--main--da-cc--adobecom.aem.reviews/drafts/xiasun/testpage01'
+  b: 'https://da-cc-poc-one.graybox.adobe.com/drafts/xiasun/testpage01.html'
+'pocone-firefly':
+  a: 'https://da-cc-poc-one--main--da-cc--adobecom.aem.reviews/products/firefly'
+  b: 'https://da-cc-poc-one.graybox.adobe.com/products/firefly.html'
+'pocone-illustrator':
+  a: 'https://da-cc-poc-one--main--da-cc--adobecom.aem.reviews/products/illustrator'
+  b: 'https://da-cc-poc-one.graybox.adobe.com/products/illustrator.html'
+'pocone-photoshop':
+  a: 'https://da-cc-poc-one--main--da-cc--adobecom.aem.reviews/products/photoshop'
+  b: 'https://da-cc-poc-one.graybox.adobe.com/products/photoshop.html'
+'poctwo-ai-overview':
+  a: 'https://da-cc-poc-two--main--da-cc--adobecom.aem.reviews/ai/overview'
+  b: 'https://da-cc-poc-two.graybox.adobe.com/ai/overview.html'
+'poctwo-how-ccpro-steps-4up':
+  a: 'https://da-cc-poc-two--main--da-cc--adobecom.aem.reviews/cc-shared/fragments/business/teams/how-ccpro-steps-4up'
+  b: 'https://da-cc-poc-two.graybox.adobe.com/cc-shared/fragments/business/teams/how-ccpro-steps-4up.html'
+'poctwo-creativecloud':
+  a: 'https://da-cc-poc-two--main--da-cc--adobecom.aem.reviews/creativecloud'
+  b: 'https://da-cc-poc-two.graybox.adobe.com/creativecloud.html'
+'poctwo-creativecloud-design':
+  a: 'https://da-cc-poc-two--main--da-cc--adobecom.aem.reviews/creativecloud/design'
+  b: 'https://da-cc-poc-two.graybox.adobe.com/creativecloud/design.html'
+'poctwo-creativecloud-video':
+  a: 'https://da-cc-poc-two--main--da-cc--adobecom.aem.reviews/creativecloud/video'
+  b: 'https://da-cc-poc-two.graybox.adobe.com/creativecloud/video.html'
+'poctwo-de-creativecloud':
+  a: 'https://da-cc-poc-two--main--da-cc--adobecom.aem.reviews/de/creativecloud'
+  b: 'https://da-cc-poc-two.graybox.adobe.com/de/creativecloud.html'
+'poctwo-testfragment01':
+  a: 'https://da-cc-poc-two--main--da-cc--adobecom.aem.reviews/drafts/xiasun/testfragment01'
+  b: 'https://da-cc-poc-two.graybox.adobe.com/drafts/xiasun/testfragment01.html'
+'poctwo-testpage01':
+  a: 'https://da-cc-poc-two--main--da-cc--adobecom.aem.reviews/drafts/xiasun/testpage01'
+  b: 'https://da-cc-poc-two.graybox.adobe.com/drafts/xiasun/testpage01.html'
+'poctwo-firefly':
+  a: 'https://da-cc-poc-two--main--da-cc--adobecom.aem.reviews/products/firefly'
+  b: 'https://da-cc-poc-two.graybox.adobe.com/products/firefly.html'
+'poctwo-illustrator':
+  a: 'https://da-cc-poc-two--main--da-cc--adobecom.aem.reviews/products/illustrator'
+  b: 'https://da-cc-poc-two.graybox.adobe.com/products/illustrator.html'
+'poctwo-photoshop':
+  a: 'https://da-cc-poc-two--main--da-cc--adobecom.aem.reviews/products/photoshop'
+  b: 'https://da-cc-poc-two.graybox.adobe.com/products/photoshop.html'

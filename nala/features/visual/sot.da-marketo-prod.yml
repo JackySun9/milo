@@ -1,0 +1,67 @@
+# marketo stage-form vs prod-form (different pages): a=stage-form  b=prod-form
+__config__:
+  waitStrategy: scroll
+
+'essential':
+  a: 'https://main--da-bacom--adobecom.aem.live/drafts/denli/blocks/marketo/stage-form/essential-show-all'
+  b: 'https://main--da-bacom--adobecom.aem.live/drafts/denli/blocks/marketo/prod-form/essential-show-all'
+'expanded':
+  a: 'https://main--da-bacom--adobecom.aem.live/drafts/denli/blocks/marketo/stage-form/expanded-show-all'
+  b: 'https://main--da-bacom--adobecom.aem.live/drafts/denli/blocks/marketo/prod-form/expanded-show-all'
+'full':
+  a: 'https://main--da-bacom--adobecom.aem.live/drafts/denli/blocks/marketo/stage-form/full-show-all'
+  b: 'https://main--da-bacom--adobecom.aem.live/drafts/denli/blocks/marketo/prod-form/full-show-all'
+'au-essential':
+  a: 'https://main--da-bacom--adobecom.aem.live/au/drafts/denli/blocks/marketo/stage-form/essential-show-all'
+  b: 'https://main--da-bacom--adobecom.aem.live/au/drafts/denli/blocks/marketo/prod-form/essential-show-all'
+'au-expanded':
+  a: 'https://main--da-bacom--adobecom.aem.live/au/drafts/denli/blocks/marketo/stage-form/expanded-show-all'
+  b: 'https://main--da-bacom--adobecom.aem.live/au/drafts/denli/blocks/marketo/prod-form/expanded-show-all'
+'au-full':
+  a: 'https://main--da-bacom--adobecom.aem.live/au/drafts/denli/blocks/marketo/stage-form/full-show-all'
+  b: 'https://main--da-bacom--adobecom.aem.live/au/drafts/denli/blocks/marketo/prod-form/full-show-all'
+'de-essential':
+  a: 'https://main--da-bacom--adobecom.aem.live/de/drafts/denli/blocks/marketo/stage-form/essential-show-all'
+  b: 'https://main--da-bacom--adobecom.aem.live/de/drafts/denli/blocks/marketo/prod-form/essential-show-all'
+'de-expanded':
+  a: 'https://main--da-bacom--adobecom.aem.live/de/drafts/denli/blocks/marketo/stage-form/expanded-show-all'
+  b: 'https://main--da-bacom--adobecom.aem.live/de/drafts/denli/blocks/marketo/prod-form/expanded-show-all'
+'de-full':
+  a: 'https://main--da-bacom--adobecom.aem.live/de/drafts/denli/blocks/marketo/stage-form/full-show-all'
+  b: 'https://main--da-bacom--adobecom.aem.live/de/drafts/denli/blocks/marketo/prod-form/full-show-all'
+'es-essential':
+  a: 'https://main--da-bacom--adobecom.aem.live/es/drafts/denli/blocks/marketo/stage-form/essential-show-all'
+  b: 'https://main--da-bacom--adobecom.aem.live/es/drafts/denli/blocks/marketo/prod-form/essential-show-all'
+'es-expanded':
+  a: 'https://main--da-bacom--adobecom.aem.live/es/drafts/denli/blocks/marketo/stage-form/expanded-show-all'
+  b: 'https://main--da-bacom--adobecom.aem.live/es/drafts/denli/blocks/marketo/prod-form/expanded-show-all'
+'es-full':
+  a: 'https://main--da-bacom--adobecom.aem.live/es/drafts/denli/blocks/marketo/stage-form/full-show-all'
+  b: 'https://main--da-bacom--adobecom.aem.live/es/drafts/denli/blocks/marketo/prod-form/full-show-all'
+'fr-essential':
+  a: 'https://main--da-bacom--adobecom.aem.live/fr/drafts/denli/blocks/marketo/stage-form/essential-show-all'
+  b: 'https://main--da-bacom--adobecom.aem.live/fr/drafts/denli/blocks/marketo/prod-form/essential-show-all'
+'fr-expanded':
+  a: 'https://main--da-bacom--adobecom.aem.live/fr/drafts/denli/blocks/marketo/stage-form/expanded-show-all'
+  b: 'https://main--da-bacom--adobecom.aem.live/fr/drafts/denli/blocks/marketo/prod-form/expanded-show-all'
+'fr-full':
+  a: 'https://main--da-bacom--adobecom.aem.live/fr/drafts/denli/blocks/marketo/stage-form/full-show-all'
+  b: 'https://main--da-bacom--adobecom.aem.live/fr/drafts/denli/blocks/marketo/prod-form/full-show-all'
+'jp-essential':
+  a: 'https://main--da-bacom--adobecom.aem.live/jp/drafts/denli/blocks/marketo/stage-form/essential-show-all'
+  b: 'https://main--da-bacom--adobecom.aem.live/jp/drafts/denli/blocks/marketo/prod-form/essential-show-all'
+'jp-expanded':
+  a: 'https://main--da-bacom--adobecom.aem.live/jp/drafts/denli/blocks/marketo/stage-form/expanded-show-all'
+  b: 'https://main--da-bacom--adobecom.aem.live/jp/drafts/denli/blocks/marketo/prod-form/expanded-show-all'
+'jp-full':
+  a: 'https://main--da-bacom--adobecom.aem.live/jp/drafts/denli/blocks/marketo/stage-form/full-show-all'
+  b: 'https://main--da-bacom--adobecom.aem.live/jp/drafts/denli/blocks/marketo/prod-form/full-show-all'
+'uk-essential':
+  a: 'https://main--da-bacom--adobecom.aem.live/uk/drafts/denli/blocks/marketo/stage-form/essential-show-all'
+  b: 'https://main--da-bacom--adobecom.aem.live/uk/drafts/denli/blocks/marketo/prod-form/essential-show-all'
+'uk-expanded':
+  a: 'https://main--da-bacom--adobecom.aem.live/uk/drafts/denli/blocks/marketo/stage-form/expanded-show-all'
+  b: 'https://main--da-bacom--adobecom.aem.live/uk/drafts/denli/blocks/marketo/prod-form/expanded-show-all'
+'uk-full':
+  a: 'https://main--da-bacom--adobecom.aem.live/uk/drafts/denli/blocks/marketo/stage-form/full-show-all'
+  b: 'https://main--da-bacom--adobecom.aem.live/uk/drafts/denli/blocks/marketo/prod-form/full-show-all'
