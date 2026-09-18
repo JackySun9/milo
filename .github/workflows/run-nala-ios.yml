@@ -47,6 +47,11 @@ on:
         required: false
         default: 'iPhone 15'
         type: string
+      max_urls:
+        description: 'Limit number of URLs (0 = all; set small e.g. 5 for a quick test)'
+        required: false
+        default: '0'
+        type: string
 
 jobs:
   prepare:
@@ -90,6 +95,7 @@ jobs:
           MILO_LIBS: ${{ inputs.milo_libs }}
           IOS_VERSION: ${{ matrix.ios }}
           IOS_DEVICE: ${{ inputs.device }}
+          IOS_MAX_URLS: ${{ inputs.max_urls }}
           S3_ACCESS_KEY_ID: ${{ secrets.S3ACCESSKEY }}
           S3_SECRET_ACCESS_KEY: ${{ secrets.S3SECRETKEY }}
         run: node nala/features/visual/sot-ios.run.js
