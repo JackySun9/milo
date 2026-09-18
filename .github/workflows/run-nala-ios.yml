@@ -117,6 +117,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install milo dependencies
+        run: npm ci
+
       - name: Merge iOS shards into results.json and upload
         env:
           SITE: ${{ inputs.site }}
