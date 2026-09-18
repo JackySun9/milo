@@ -1,16 +1,14 @@
-# ─────────────────────────────────────────────────────────────────────────────
-# Copy this into  <your milo repo>/.github/workflows/run-nala-ios.yml
-#
-# Real iOS Simulator screenshots on self-hosted macOS runners — PURE simctl,
-# no Appium / no Node (only Xcode). Dispatched by nala-auto's Run Console (kind: ios).
-# Vendor the `ios-runner/` folder from nala-auto into this repo (or add a checkout).
-#
-# Prereqs on each [self-hosted, macOS, ios-sim] runner:
-#   - Full Xcode 16 selected (`xcode-select -p` -> /Applications/Xcode*.app/...)
-#     with at least one iOS runtime, running in a logged-in GUI (Aqua) session
-#   - jq
-# ─────────────────────────────────────────────────────────────────────────────
 name: Nala iOS (Simulator) Screenshots
+
+# Real iOS Simulator visual regression on the self-hosted Mac Mini pool.
+# Captures each URL in sot.<site>.yml on real Mobile Safari (via simctl),
+# A (unmodified) vs B (+ milo_libs), pixel-diffs them, and publishes into the
+# SAME results.json the desktop screenshot-diff uses — so iOS shows up next to
+# chrome/ipad/iphone at:
+#   http://nala-auto.corp.adobe.com/imagediff/<site>
+#
+# Runners must be labeled [self-hosted, macOS, ios-sim] with full Xcode + an
+# iOS runtime, running in a logged-in GUI session.
 
 on:
   workflow_dispatch:
@@ -19,14 +17,28 @@ on:
         description: 'Site (matches nala/features/visual/sot.<site>.yml)'
         required: true
         default: 'bacom'
-        type: string
+        type: choice
+        options:
+          - bacom
+          - bacom-blog
+          - cc
+          - da-marketo
+          - da-marketo-prod
+          - dc
+          - express
+          - graybox-bacom
+          - graybox-cc
+          - graybox-dc
+          - graybox-upp
+          - homepage
+          - uar
       milo_libs:
-        description: 'Query string appended to the candidate URL'
+        description: 'Query string appended to URL B (the candidate)'
         required: false
         default: '?milolibs=stage'
         type: string
       ios_versions:
-        description: 'Comma-separated iOS versions, e.g. 17.5,18.3'
+        description: 'Comma-separated iOS versions, e.g. 18.3 or 17.5,18.3'
         required: true
         default: '18.3'
         type: string
@@ -51,41 +63,80 @@ jobs:
 
   capture:
     needs: prepare
-    runs-on: [self-hosted, macOS, ios-sim]
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
-    timeout-minutes: 45
+    runs-on: [self-hosted, macOS, ios-sim]
+    timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install milo dependencies
+        run: npm ci
 
       - name: Ensure iOS runtime ${{ matrix.ios }}
         run: ./ios-runner/simulators.sh ensure "${{ matrix.ios }}" || true
 
-      - name: Resolve URLs for ${{ inputs.site }}
-        id: urls
-        run: echo "list=$(./ios-runner/site-urls.sh '${{ inputs.site }}' '${{ inputs.milo_libs }}')" >> "$GITHUB_OUTPUT"
-
-      - name: Capture on iOS ${{ matrix.ios }} (fresh sim, simctl)
+      - name: Capture real iOS ${{ matrix.ios }} (fresh sim per shot)
         env:
-          LAB_DEVICE: ${{ inputs.device }}
-          LAB_VERSION: ${{ matrix.ios }}
-          LAB_URLS: ${{ steps.urls.outputs.list }}
-          LAB_OUT: shots/${{ inputs.site }}/ios-${{ matrix.ios }}
-        run: ./ios-runner/simctl-capture.sh
+          SITE: ${{ inputs.site }}
+          MILO_LIBS: ${{ inputs.milo_libs }}
+          IOS_VERSION: ${{ matrix.ios }}
+          IOS_DEVICE: ${{ inputs.device }}
+          S3_ACCESS_KEY_ID: ${{ secrets.S3ACCESSKEY }}
+          S3_SECRET_ACCESS_KEY: ${{ secrets.S3SECRETKEY }}
+        run: node nala/features/visual/sot-ios.run.js
 
-      - name: Upload screenshots artifact
+      - name: Upload shard JSON to GH artifacts
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ios-${{ inputs.site }}-${{ matrix.ios }}
-          path: shots/${{ inputs.site }}/ios-${{ matrix.ios }}
+          name: results-${{ inputs.site }}-ios${{ matrix.ios }}
+          path: screenshots/${{ inputs.site }}/results-ios${{ matrix.ios }}.json
+          retention-days: 7
 
-      # TODO(integration): push into the nala-auto results format so shots show at
-      # /imagediff/${{ inputs.site }} — reuse tools/screenshot-diff/lib/upload-one.js
-      # with S3ACCESSKEY / S3SECRETKEY, matching results.json / timestamp.json.
-      - name: Upload to S3 (nala-auto results)  # placeholder — wire to your uploader
-        if: ${{ false }}
+  # Fan-in: fold the iOS shard(s) into the live results.json (which also holds
+  # the desktop chrome/ipad/iphone entries) so /imagediff shows everything.
+  publish:
+    needs: capture
+    runs-on: [self-hosted, macOS, ios-sim]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Merge iOS shards into results.json and upload
         env:
-          S3ACCESSKEY: ${{ secrets.S3ACCESSKEY }}
-          S3SECRETKEY: ${{ secrets.S3SECRETKEY }}
-        run: echo "wire this to your existing upload-one.js"
+          SITE: ${{ inputs.site }}
+          IOS_VERSIONS: ${{ inputs.ios_versions }}
+          NALA_BASE: http://nala-auto.corp.adobe.com
+          S3_ACCESS_KEY_ID: ${{ secrets.S3ACCESSKEY }}
+          S3_SECRET_ACCESS_KEY: ${{ secrets.S3SECRETKEY }}
+        run: |
+          DIR="screenshots/$SITE"
+          mkdir -p "$DIR"
+          # Start from the currently-published results.json (desktop viewports),
+          # or empty if none exists yet.
+          curl -sSf -o "$DIR/results.json" "$NALA_BASE/api/milo/screenshots/$SITE/results.json" || echo '{}' > "$DIR/results.json"
+          # Pull each iOS shard we just uploaded.
+          IFS=',' read -ra V <<< "$IOS_VERSIONS"
+          for v in "${V[@]}"; do
+            v=$(echo "$v" | tr -d ' ')
+            curl -sSf -o "$DIR/results-ios$v.json" "$NALA_BASE/api/milo/screenshots/$SITE/results-ios$v.json" \
+              && echo "✓ pulled results-ios$v.json" \
+              || echo "::warning::no results-ios$v.json on S3"
+          done
+          # Merge all iOS shards into results.json (iOS keys are distinct: <page>-ios<ver>).
+          node -e "const fs=require('fs');const d=process.env.DIR||('screenshots/'+process.env.SITE);let r={};try{r=JSON.parse(fs.readFileSync(d+'/results.json'))}catch(e){};for(const f of fs.readdirSync(d).filter(x=>/^results-ios.*\.json$/.test(x))){try{Object.assign(r,JSON.parse(fs.readFileSync(d+'/'+f)))}catch(e){}}fs.writeFileSync(d+'/results.json',JSON.stringify(r,null,2));console.log('merged keys:',Object.keys(r).length)"
+          DIR="$DIR" SITE="$SITE" node tools/screenshot-diff/lib/upload-one.js "$DIR/results.json"
+          node -e "require('fs').writeFileSync(process.env.DIR+'/timestamp.json',JSON.stringify([new Date().toLocaleString()],null,2))"
+          node tools/screenshot-diff/lib/upload-one.js "$DIR/timestamp.json"
+
+      - name: Print result URL
+        run: echo "::notice title=View results::http://nala-auto.corp.adobe.com/imagediff/${{ inputs.site }}"
