@@ -98,6 +98,11 @@ async function captureFullPage(sid, url, outPath, settle) {
   const canvas = new PNG({ width: first.width, height: fullH });
   PNG.bitblt(first, canvas, 0, 0, first.width, Math.min(first.height, fullH), 0, 0);
 
+  // Hide fixed/sticky elements so a pinned nav/banner doesn't repeat in every
+  // stitched section (it stays in the first viewport captured above).
+  // visibility:hidden preserves layout, so nothing shifts.
+  await exec(sid, "for (const el of document.querySelectorAll('*')) { const p = getComputedStyle(el).position; if (p === 'fixed' || p === 'sticky') el.style.visibility = 'hidden'; }");
+
   y = innerH;
   while (y < scrollH) {
     await exec(sid, `window.scrollTo(0, ${y})`);
