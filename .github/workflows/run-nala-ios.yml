@@ -4,11 +4,11 @@ name: Nala iOS (Simulator) Screenshots
 # Captures each URL in sot.<site>.yml on real Mobile Safari (via simctl),
 # A (unmodified) vs B (+ milo_libs), pixel-diffs them, and publishes into the
 # SAME results.json the desktop screenshot-diff uses — so iOS shows up next to
-# chrome/ipad/iphone at:
-#   http://nala-auto.corp.adobe.com/imagediff/<site>
+# chrome/ipad/iphone at:  http://nala-auto.corp.adobe.com/imagediff/<site>
 #
-# Runners must be labeled [self-hosted, macOS, ios-sim] with full Xcode + an
-# iOS runtime, running in a logged-in GUI session.
+# Matrix = devices x ios_versions (each combo is one job, one reused simulator).
+# Runners must be labeled [self-hosted, macOS, ios-sim] with full Xcode + the
+# requested iOS runtime(s), in a logged-in GUI session.
 
 on:
   workflow_dispatch:
@@ -42,10 +42,10 @@ on:
         required: true
         default: '18.3'
         type: string
-      device:
-        description: 'Simulator device'
+      devices:
+        description: 'Comma-separated devices (must match `xcrun simctl list devicetypes`)'
         required: false
-        default: 'iPhone 15'
+        default: 'iPhone 15,iPad Pro 11-inch (M4)'
         type: string
       max_urls:
         description: 'Limit number of URLs (0 = all; set small e.g. 5 for a quick test)'
@@ -62,9 +62,17 @@ jobs:
       - id: split
         shell: bash
         run: |
-          IFS=',' read -ra V <<< "${{ inputs.ios_versions }}"
-          json=$(printf '%s\n' "${V[@]}" | sed 's/ //g' | jq -R . | jq -cs '{ios: .}')
-          echo "matrix=$json" >> "$GITHUB_OUTPUT"
+          inc=""
+          IFS=',' read -ra DL <<< "${{ inputs.devices }}"
+          IFS=',' read -ra VL <<< "${{ inputs.ios_versions }}"
+          for dev in "${DL[@]}"; do
+            dev="$(echo "$dev" | sed 's/^ *//;s/ *$//')"
+            for ios in "${VL[@]}"; do
+              ios="$(echo "$ios" | sed 's/^ *//;s/ *$//')"
+              inc="$inc{\"device\":\"$dev\",\"ios\":\"$ios\"},"
+            done
+          done
+          echo "matrix={\"include\":[${inc%,}]}" >> "$GITHUB_OUTPUT"
 
   capture:
     needs: prepare
@@ -72,7 +80,7 @@ jobs:
       fail-fast: false
       matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
     runs-on: [self-hosted, macOS, ios-sim]
-    timeout-minutes: 60
+    timeout-minutes: 90
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -89,27 +97,20 @@ jobs:
       - name: Ensure iOS runtime ${{ matrix.ios }}
         run: ./ios-runner/simulators.sh ensure "${{ matrix.ios }}" || true
 
-      - name: Capture real iOS ${{ matrix.ios }} (fresh sim per shot)
+      - name: Capture ${{ matrix.device }} · iOS ${{ matrix.ios }} (one reused sim)
         env:
           SITE: ${{ inputs.site }}
           MILO_LIBS: ${{ inputs.milo_libs }}
           IOS_VERSION: ${{ matrix.ios }}
-          IOS_DEVICE: ${{ inputs.device }}
+          IOS_DEVICE: ${{ matrix.device }}
           IOS_MAX_URLS: ${{ inputs.max_urls }}
           S3_ACCESS_KEY_ID: ${{ secrets.S3ACCESSKEY }}
           S3_SECRET_ACCESS_KEY: ${{ secrets.S3SECRETKEY }}
         run: node nala/features/visual/sot-ios.run.js
 
-      - name: Upload shard JSON to GH artifacts
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: results-${{ inputs.site }}-ios${{ matrix.ios }}
-          path: screenshots/${{ inputs.site }}/results-ios${{ matrix.ios }}.json
-          retention-days: 7
-
-  # Fan-in: fold the iOS shard(s) into the live results.json (which also holds
-  # the desktop chrome/ipad/iphone entries) so /imagediff shows everything.
+  # Fan-in: fold every iOS shard (one per device x version) into the live
+  # results.json (which also holds desktop chrome/ipad/iphone) so /imagediff
+  # shows everything side by side.
   publish:
     needs: capture
     runs-on: [self-hosted, macOS, ios-sim]
@@ -130,26 +131,30 @@ jobs:
         env:
           SITE: ${{ inputs.site }}
           IOS_VERSIONS: ${{ inputs.ios_versions }}
+          DEVICES: ${{ inputs.devices }}
           NALA_BASE: http://nala-auto.corp.adobe.com
           S3_ACCESS_KEY_ID: ${{ secrets.S3ACCESSKEY }}
           S3_SECRET_ACCESS_KEY: ${{ secrets.S3SECRETKEY }}
         run: |
           DIR="screenshots/$SITE"
           mkdir -p "$DIR"
-          # Start from the currently-published results.json (desktop viewports),
-          # or empty if none exists yet.
+          # Start from the currently-published results.json (desktop viewports).
           curl -sSf -o "$DIR/results.json" "$NALA_BASE/api/milo/screenshots/$SITE/results.json" || echo '{}' > "$DIR/results.json"
-          # Pull each iOS shard we just uploaded.
-          IFS=',' read -ra V <<< "$IOS_VERSIONS"
-          for v in "${V[@]}"; do
-            v=$(echo "$v" | tr -d ' ')
-            curl -sSf -o "$DIR/results-ios$v.json" "$NALA_BASE/api/milo/screenshots/$SITE/results-ios$v.json" \
-              && echo "✓ pulled results-ios$v.json" \
-              || echo "::warning::no results-ios$v.json on S3"
+          # Pull every iOS shard we just uploaded (one per device x version).
+          IFS=',' read -ra VL <<< "$IOS_VERSIONS"
+          IFS=',' read -ra DL <<< "$DEVICES"
+          for v in "${VL[@]}"; do
+            v="$(echo "$v" | sed 's/ //g')"
+            for dev in "${DL[@]}"; do
+              sl="$(echo "$dev" | tr -cd 'A-Za-z0-9')"
+              f="results-ios$v-$sl.json"
+              curl -sSf -o "$DIR/$f" "$NALA_BASE/api/milo/screenshots/$SITE/$f" \
+                && echo "✓ pulled $f" || echo "::warning::no $f on S3"
+            done
           done
-          # Merge all iOS shards into results.json (iOS keys are distinct: <page>-ios<ver>).
-          node -e "const fs=require('fs');const d=process.env.DIR||('screenshots/'+process.env.SITE);let r={};try{r=JSON.parse(fs.readFileSync(d+'/results.json'))}catch(e){};for(const f of fs.readdirSync(d).filter(x=>/^results-ios.*\.json$/.test(x))){try{Object.assign(r,JSON.parse(fs.readFileSync(d+'/'+f)))}catch(e){}}fs.writeFileSync(d+'/results.json',JSON.stringify(r,null,2));console.log('merged keys:',Object.keys(r).length)"
-          DIR="$DIR" SITE="$SITE" node tools/screenshot-diff/lib/upload-one.js "$DIR/results.json"
+          # Merge all iOS shards into results.json (iOS keys are distinct: <page>-ios<ver>-<device>).
+          node -e "const fs=require('fs');const d='$DIR';let r={};try{r=JSON.parse(fs.readFileSync(d+'/results.json'))}catch(e){};for(const f of fs.readdirSync(d).filter(x=>/^results-ios.*\.json$/.test(x))){try{Object.assign(r,JSON.parse(fs.readFileSync(d+'/'+f)))}catch(e){}}fs.writeFileSync(d+'/results.json',JSON.stringify(r,null,2));console.log('merged keys:',Object.keys(r).length)"
+          node tools/screenshot-diff/lib/upload-one.js "$DIR/results.json"
           node -e "require('fs').writeFileSync('$DIR/timestamp.json',JSON.stringify([new Date().toLocaleString()],null,2))"
           node tools/screenshot-diff/lib/upload-one.js "$DIR/timestamp.json"
 
