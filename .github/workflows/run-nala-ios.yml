@@ -150,7 +150,7 @@ jobs:
           # Merge all iOS shards into results.json (iOS keys are distinct: <page>-ios<ver>).
           node -e "const fs=require('fs');const d=process.env.DIR||('screenshots/'+process.env.SITE);let r={};try{r=JSON.parse(fs.readFileSync(d+'/results.json'))}catch(e){};for(const f of fs.readdirSync(d).filter(x=>/^results-ios.*\.json$/.test(x))){try{Object.assign(r,JSON.parse(fs.readFileSync(d+'/'+f)))}catch(e){}}fs.writeFileSync(d+'/results.json',JSON.stringify(r,null,2));console.log('merged keys:',Object.keys(r).length)"
           DIR="$DIR" SITE="$SITE" node tools/screenshot-diff/lib/upload-one.js "$DIR/results.json"
-          node -e "require('fs').writeFileSync(process.env.DIR+'/timestamp.json',JSON.stringify([new Date().toLocaleString()],null,2))"
+          node -e "require('fs').writeFileSync('$DIR/timestamp.json',JSON.stringify([new Date().toLocaleString()],null,2))"
           node tools/screenshot-diff/lib/upload-one.js "$DIR/timestamp.json"
 
       - name: Print result URL
