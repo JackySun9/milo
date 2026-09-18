@@ -23,6 +23,7 @@
  *   S3_ACCESS_KEY_ID / S3_SECRET_ACCESS_KEY (both to upload).
  */
 const fs = require('fs');
+const { execFileSync } = require('child_process');
 // eslint-disable-next-line import/no-extraneous-dependencies
 const { getComparator } = require('playwright-core/lib/utils');
 // eslint-disable-next-line import/no-extraneous-dependencies
@@ -43,11 +44,65 @@ const wd = {
   del: async (p) => (await fetch(APPIUM + p, { method: 'DELETE' })).json(),
 };
 
-async function newSession(device, version) {
+// --- simctl: pin the EXACT device + runtime -------------------------------
+// We create the simulator ourselves and hand its UDID to Appium instead of
+// letting Appium fuzzy-match `deviceName`. That match is unreliable: it silently
+// ran "iPhone 15" when "iPhone 16" was requested, and reported "no device" for
+// combos it couldn't resolve. Creating the sim ourselves means the device that
+// runs is always the one that was asked for — or the job fails with a clear
+// reason (e.g. iPhone 16 has no iOS 17.5 build).
+const simctl = (args) => execFileSync('xcrun', ['simctl', ...args], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+const lastLine = (s) => String(s || '').trim().split('\n').filter(Boolean).pop() || '';
+
+// "18.3" -> the installed iOS runtime object; version '' picks the newest.
+function resolveRuntime(version) {
+  const all = JSON.parse(simctl(['list', 'runtimes', '--json'])).runtimes || [];
+  const ready = all.filter((r) => r.isAvailable && /iOS/i.test(r.name || r.identifier || ''));
+  if (!ready.length) throw new Error('No iOS runtimes installed on this runner');
+  if (version) {
+    const dashed = `iOS-${version.replace(/\./g, '-')}`;
+    const want = ready.find((r) => r.version === version || (r.identifier || '').endsWith(dashed));
+    if (!want) throw new Error(`iOS ${version} runtime not installed on this runner (installed: ${ready.map((r) => r.version).join(', ')})`);
+    return want;
+  }
+  ready.sort((a, b) => (a.version < b.version ? 1 : -1));
+  return ready[0];
+}
+
+// "iPhone 16 Pro Max" -> its device type object (exact name, then case-insensitive).
+function resolveDeviceType(device) {
+  const all = JSON.parse(simctl(['list', 'devicetypes', '--json'])).devicetypes || [];
+  const dt = all.find((d) => d.name === device) || all.find((d) => (d.name || '').toLowerCase() === device.toLowerCase());
+  if (!dt) throw new Error(`Device "${device}" is not available on this runner (no matching simulator device type)`);
+  return dt;
+}
+
+// Create + boot a throwaway sim for exactly this device+runtime; return its UDID.
+function createSim(name, deviceType, runtime) {
+  let udid;
+  try {
+    udid = simctl(['create', name, deviceType.identifier, runtime.identifier]).trim();
+  } catch (e) {
+    // simctl refuses incompatible pairs (e.g. iPhone 16 on iOS 17.5) — surface why.
+    throw new Error(`Cannot run "${deviceType.name}" on ${runtime.name}: ${lastLine(e.stderr) || lastLine(e.message) || 'device/runtime not compatible'}`);
+  }
+  try { simctl(['boot', udid]); } catch (e) { /* may already be booting */ }
+  try { simctl(['bootstatus', udid, '-b']); } catch (e) { /* best effort */ }
+  return udid;
+}
+
+function deleteSim(udid) {
+  if (!udid) return;
+  try { simctl(['shutdown', udid]); } catch (e) { /* noop */ }
+  try { simctl(['delete', udid]); } catch (e) { /* noop */ }
+}
+
+// Attach Appium to the exact simulator we created (by UDID — no device matching).
+async function newSession(udid) {
   const caps = {
     platformName: 'iOS',
     'appium:automationName': 'XCUITest',
-    'appium:deviceName': device,
+    'appium:udid': udid,
     browserName: 'Safari',
     'appium:newCommandTimeout': 600,
     'appium:safariInitialUrl': 'about:blank',
@@ -56,7 +111,6 @@ async function newSession(device, version) {
     'appium:wdaLaunchTimeout': 240000,
     'appium:wdaConnectionTimeout': 240000,
   };
-  if (version) caps['appium:platformVersion'] = version;
   const r = await wd.post('/session', { capabilities: { alwaysMatch: caps, firstMatch: [{}] } });
   const sid = r.value?.sessionId || r.sessionId;
   if (!sid) throw new Error(`session create failed: ${JSON.stringify(r).slice(0, 400)}`);
@@ -137,10 +191,20 @@ async function main() {
   console.log(`▶ ${device} · iOS ${version || '(latest)'} · Appium ${APPIUM}`);
   console.log(`▶ Site: ${site} · URLs: ${entries.length} · MILO_LIBS: ${milolibs}`);
 
+  // Resolve + create the EXACT device/runtime up front. If the pair is invalid
+  // (e.g. iPhone 16 on iOS 17.5) this throws now, with a clear reason, instead
+  // of silently capturing on the wrong device.
+  const runtime = resolveRuntime(version);
+  const deviceType = resolveDeviceType(device);
+  console.log(`▶ Simulator: ${deviceType.name} · ${runtime.name} — creating…`);
+  const simName = `nala-${slug(device)}-${slug(version || runtime.version)}-${process.pid}`;
+  const udid = createSim(simName, deviceType, runtime);
+  console.log(`▶ Simulator ${udid} booted`);
+
   const comparator = getComparator('image/png');
   const results = {};
   console.log('▶ Creating Safari session (first run builds WebDriverAgent)…');
-  const sid = await newSession(device, version);
+  const sid = await newSession(udid);
   console.log(`▶ Session ${sid} (reused for all captures)`);
 
   try {
@@ -175,6 +239,7 @@ async function main() {
     }
   } finally {
     try { await wd.del(`/session/${sid}`); } catch (e) { /* noop */ }
+    deleteSim(udid);
   }
 
   const resultsPath = `${folderPath}/${resultsFile}`;
