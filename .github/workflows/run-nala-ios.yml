@@ -1,8 +1,8 @@
 name: Nala iOS (Simulator) Screenshots
 
 # Real iOS Simulator visual regression on the self-hosted Mac Mini pool.
-# Captures each URL in sot.<site>.yml on real Mobile Safari (via simctl),
-# A (unmodified) vs B (+ milo_libs), pixel-diffs them, and publishes into the
+# Captures each URL in sot.<site>.yml on real Mobile Safari (via Appium/XCUITest,
+# FULL-PAGE), A (unmodified) vs B (+ milo_libs), pixel-diffs them, publishes into the
 # SAME results.json the desktop screenshot-diff uses — so iOS shows up next to
 # chrome/ipad/iphone at:  http://nala-auto.corp.adobe.com/imagediff/<site>
 #
@@ -97,7 +97,7 @@ jobs:
       - name: Ensure iOS runtime ${{ matrix.ios }}
         run: ./ios-runner/simulators.sh ensure "${{ matrix.ios }}" || true
 
-      - name: Capture ${{ matrix.device }} · iOS ${{ matrix.ios }} (one reused sim)
+      - name: Capture ${{ matrix.device }} · iOS ${{ matrix.ios }} (Appium full-page)
         env:
           SITE: ${{ inputs.site }}
           MILO_LIBS: ${{ inputs.milo_libs }}
@@ -106,7 +106,14 @@ jobs:
           IOS_MAX_URLS: ${{ inputs.max_urls }}
           S3_ACCESS_KEY_ID: ${{ secrets.S3ACCESSKEY }}
           S3_SECRET_ACCESS_KEY: ${{ secrets.S3SECRETKEY }}
-        run: node nala/features/visual/sot-ios.run.js
+        run: |
+          # Appium is pre-installed under nvm on ios-sim runners; start it (nvm's
+          # node) in the background, then run the capture with the job's node
+          # (which resolves milo's node_modules by path).
+          ( . "$HOME/.nvm/nvm.sh" && appium --base-path / > "$RUNNER_TEMP/appium.log" 2>&1 & )
+          for i in $(seq 1 60); do curl -fsS http://127.0.0.1:4723/status >/dev/null 2>&1 && break; sleep 1; done
+          curl -fsS http://127.0.0.1:4723/status >/dev/null || { echo "Appium failed to start"; cat "$RUNNER_TEMP/appium.log"; exit 1; }
+          node nala/features/visual/sot-ios.run.js
 
   # Fan-in: fold every iOS shard (one per device x version) into the live
   # results.json (which also holds desktop chrome/ipad/iphone) so /imagediff

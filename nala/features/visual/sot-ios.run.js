@@ -1,48 +1,63 @@
 #!/usr/bin/env node
 /**
- * SOT visual regression on REAL iOS Simulators (via `simctl`).
+ * SOT visual regression on REAL iOS Simulators via Appium (XCUITest) — full page.
  *
- * Sibling of sot.run.js, but drives real Mobile Safari on an iOS Simulator
- * instead of Playwright/Chromium. Produces the SAME results format
- * (`{ "<key>-ios<ver>-<device>": [{ a, b, diff? }] }`) and reuses milo's pixel
- * comparator + S3 uploader, so iOS shows up next to chrome/ipad/iphone in
- * /imagediff/<site> with zero changes to the viewer.
+ * Drives real Mobile Safari on an iOS Simulator through Appium's WebDriver HTTP
+ * API (plain fetch, no webdriverio dep). For each URL captures A (unmodified)
+ * vs B (+ MILO_LIBS) as FULL-PAGE screenshots (scroll + stitch), pixel-diffs
+ * them, and produces the SAME results format as sot.run.js so iOS shows up next
+ * to chrome/ipad/iphone at /imagediff/<site>.
  *
- * Perf: boots ONE simulator per job and reuses it for every capture (a fresh
- * boot per screenshot was ~2x too slow for full sites). Safari is terminated
- * between captures for a clean page load; cookies persist in the reused sim,
- * which is fine for milolibs A/B diffs (comparator tolerance absorbs minor
- * personalization noise).
+ * One Appium session (one simulator) is reused for the whole job; cookies +
+ * storage are cleared between every capture (clean A/B state, like sot.run.js).
+ * Stitching uses pngjs (PNG) bundled inside playwright-core — no extra dep.
+ *
+ * Requires an Appium server on APPIUM_URL (default http://127.0.0.1:4723) with
+ * the xcuitest driver, plus full Xcode + the requested iOS runtime, in a
+ * logged-in GUI session.
  *
  * Required env: SITE
  * Optional: MILO_LIBS (?milolibs=stage), IOS_VERSION (e.g. 18.3; default newest),
- *   IOS_DEVICE (default 'iPhone 15'), IOS_SETTLE (secs after openurl, default 8),
- *   IOS_MAX_URLS (0 = all; N for quick tests),
+ *   IOS_DEVICE (default 'iPhone 15'), IOS_SETTLE (secs, default 6),
+ *   IOS_MAX_URLS (0 = all), APPIUM_URL,
  *   S3_ACCESS_KEY_ID / S3_SECRET_ACCESS_KEY (both to upload).
  */
-const { execFileSync } = require('child_process');
 const fs = require('fs');
 // eslint-disable-next-line import/no-extraneous-dependencies
 const { getComparator } = require('playwright-core/lib/utils');
+// eslint-disable-next-line import/no-extraneous-dependencies
+const { PNG } = require('playwright-core/lib/utilsBundle');
 const { uploadResultsDir } = require('../../../tools/screenshot-diff/lib/upload-s3.js');
 const { validatePath } = require('../../../tools/screenshot-diff/lib/utils.js');
 const { loadSiteData } = require('../../../tools/screenshot-diff/lib/load-data.js');
 const config = require('../../../tools/screenshot-diff/lib/config.js');
 
+const APPIUM = process.env.APPIUM_URL || 'http://127.0.0.1:4723';
 const COMPARE_OPTS = { threshold: 0.2, maxDiffPixelRatio: 0.01 };
-const SAFARI = 'com.apple.mobilesafari';
-const simctl = (args) => execFileSync('xcrun', ['simctl', ...args], { encoding: 'utf8' });
-const sleep = (s) => new Promise((r) => setTimeout(r, s * 1000));
-const slug = (s) => s.replace(/[^A-Za-z0-9]+/g, ''); // "iPad Pro 11-inch (M4)" -> "iPadPro11inchM4"
+const slug = (s) => s.replace(/[^A-Za-z0-9]+/g, '');
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-function resolveRuntime(version) {
-  const lines = simctl(['list', 'runtimes'])
-    .split('\n')
-    .filter((l) => /iOS/.test(l) && /com\.apple/.test(l));
-  const line = (version && lines.find((l) => l.includes(`iOS ${version}`))) || lines[lines.length - 1];
-  const m = line && line.match(/com\.apple\.CoreSimulator\.SimRuntime\.iOS[-\w]*/);
-  if (!m) throw new Error(`no iOS runtime for "${version || 'latest'}" (xcodebuild -downloadPlatform iOS)`);
-  return m[0];
+const wd = {
+  post: async (p, body) => (await fetch(APPIUM + p, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })).json(),
+  get: async (p) => (await fetch(APPIUM + p)).json(),
+  del: async (p) => (await fetch(APPIUM + p, { method: 'DELETE' })).json(),
+};
+
+async function newSession(device, version) {
+  const caps = { platformName: 'iOS', 'appium:automationName': 'XCUITest', 'appium:deviceName': device, browserName: 'Safari', 'appium:newCommandTimeout': 600, 'appium:safariInitialUrl': 'about:blank' };
+  if (version) caps['appium:platformVersion'] = version;
+  const r = await wd.post('/session', { capabilities: { alwaysMatch: caps, firstMatch: [{}] } });
+  const sid = r.value?.sessionId || r.sessionId;
+  if (!sid) throw new Error(`session create failed: ${JSON.stringify(r).slice(0, 400)}`);
+  return sid;
+}
+const exec = async (sid, script, args = []) => (await wd.post(`/session/${sid}/execute/sync`, { script, args })).value;
+const navigate = (sid, url) => wd.post(`/session/${sid}/url`, { url });
+const shotPng = async (sid) => PNG.sync.read(Buffer.from((await wd.get(`/session/${sid}/screenshot`)).value || '', 'base64'));
+
+async function resetState(sid) {
+  try { await wd.del(`/session/${sid}/cookie`); } catch (e) { /* noop */ }
+  try { await exec(sid, 'try{localStorage.clear();sessionStorage.clear()}catch(e){}'); } catch (e) { /* noop */ }
 }
 
 function appendQuery(url, qs) {
@@ -52,19 +67,38 @@ function appendQuery(url, qs) {
   return `${url}${url.includes('?') ? '&' : '?'}${stripped}`;
 }
 
-function bootSim(device, runtime) {
-  const udid = simctl(['create', `nala-ios-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, device, runtime]).trim();
-  simctl(['boot', udid]);
-  try { simctl(['bootstatus', udid]); } catch (e) { /* may exit nonzero once booted */ }
-  return udid;
-}
+// Navigate, settle, wake lazy content by scrolling, then scroll + stitch full page.
+async function captureFullPage(sid, url, outPath, settle) {
+  await navigate(sid, url);
+  await sleep(settle * 1000);
+  const innerH = await exec(sid, 'return window.innerHeight');
+  const dpr = await exec(sid, 'return window.devicePixelRatio');
 
-// Capture one URL on the reused sim. Fresh Safari launch each time.
-async function captureUrl(udid, url, outPath, settle) {
-  try { simctl(['terminate', udid, SAFARI]); } catch (e) { /* not running */ }
-  simctl(['openurl', udid, url]);
-  await sleep(settle);
-  simctl(['io', udid, 'screenshot', outPath]);
+  // Pre-scroll to trigger lazy sections, then back to top.
+  let y = 0;
+  let maxH = await exec(sid, 'return Math.max(document.body.scrollHeight, document.documentElement.scrollHeight)');
+  while (y < maxH) { await exec(sid, `window.scrollTo(0, ${y})`); await sleep(120); y += innerH; }
+  await exec(sid, 'window.scrollTo(0, 0)');
+  await sleep(800);
+
+  const scrollH = await exec(sid, 'return Math.max(document.body.scrollHeight, document.documentElement.scrollHeight)');
+  const first = await shotPng(sid);
+  const fullH = Math.round(scrollH * dpr);
+  const canvas = new PNG({ width: first.width, height: fullH });
+  PNG.bitblt(first, canvas, 0, 0, first.width, Math.min(first.height, fullH), 0, 0);
+
+  y = innerH;
+  while (y < scrollH) {
+    await exec(sid, `window.scrollTo(0, ${y})`);
+    await sleep(400);
+    const actualY = await exec(sid, 'return window.pageYOffset');
+    const img = await shotPng(sid);
+    const destY = Math.round(actualY * dpr);
+    const copyH = Math.min(img.height, fullH - destY);
+    if (copyH > 0) PNG.bitblt(img, canvas, 0, 0, img.width, copyH, 0, destY);
+    y += innerH;
+  }
+  fs.writeFileSync(validatePath(outPath, { forWriting: true }), PNG.sync.write(canvas));
 }
 
 async function main() {
@@ -73,25 +107,25 @@ async function main() {
   const milolibs = process.env.MILO_LIBS || '?milolibs=stage';
   const device = process.env.IOS_DEVICE || 'iPhone 15';
   const version = process.env.IOS_VERSION || '';
-  const settle = Number(process.env.IOS_SETTLE || 8);
-  const runtime = resolveRuntime(version);
-  const vp = `ios${version}-${slug(device)}`; // e.g. ios18.3-iPhone15
+  const settle = Number(process.env.IOS_SETTLE || 6);
+  const vp = `ios${version}-${slug(device)}`;
   const resultsFile = `results-${vp}.json`;
 
   const raw = await loadSiteData(site, { dir: __dirname });
   const allEntries = Object.entries(raw).filter(([k]) => !k.startsWith('__'));
-  const maxUrls = Number(process.env.IOS_MAX_URLS || 0); // 0 = all; set N for quick tests
+  const maxUrls = Number(process.env.IOS_MAX_URLS || 0);
   const entries = maxUrls > 0 ? allEntries.slice(0, maxUrls) : allEntries;
   const folderPath = `${config.baseDir}/${site}`;
   validatePath(`${folderPath}/.touch`, { forWriting: true });
 
-  console.log(`▶ ${device} · iOS ${version || '(latest)'} · ${runtime}`);
+  console.log(`▶ ${device} · iOS ${version || '(latest)'} · Appium ${APPIUM}`);
   console.log(`▶ Site: ${site} · URLs: ${entries.length} · MILO_LIBS: ${milolibs}`);
 
   const comparator = getComparator('image/png');
   const results = {};
-  const udid = bootSim(device, runtime);
-  console.log(`▶ Booted ${udid} (reused for all captures)`);
+  console.log('▶ Creating Safari session (first run builds WebDriverAgent)…');
+  const sid = await newSession(device, version);
+  console.log(`▶ Session ${sid} (reused for all captures)`);
 
   try {
     for (const [key, value] of entries) {
@@ -102,8 +136,10 @@ async function main() {
       const bPath = `${folderPath}/${name}-b.png`;
       console.log(`  [${name}] ${urlA}  vs  ${urlB}`);
       try {
-        await captureUrl(udid, urlA, aPath, settle);
-        await captureUrl(udid, urlB, bPath, settle);
+        await resetState(sid);
+        await captureFullPage(sid, urlA, aPath, settle);
+        await resetState(sid);
+        await captureFullPage(sid, urlB, bPath, settle);
         const entry = { order: 1, a: aPath, b: bPath, urls: `${urlA} | ${urlB}` };
         const diff = comparator(
           fs.readFileSync(validatePath(aPath)),
@@ -122,8 +158,7 @@ async function main() {
       }
     }
   } finally {
-    try { simctl(['shutdown', udid]); } catch (e) { /* noop */ }
-    try { simctl(['delete', udid]); } catch (e) { /* noop */ }
+    try { await wd.del(`/session/${sid}`); } catch (e) { /* noop */ }
   }
 
   const resultsPath = `${folderPath}/${resultsFile}`;
