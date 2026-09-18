@@ -44,7 +44,18 @@ const wd = {
 };
 
 async function newSession(device, version) {
-  const caps = { platformName: 'iOS', 'appium:automationName': 'XCUITest', 'appium:deviceName': device, browserName: 'Safari', 'appium:newCommandTimeout': 600, 'appium:safariInitialUrl': 'about:blank' };
+  const caps = {
+    platformName: 'iOS',
+    'appium:automationName': 'XCUITest',
+    'appium:deviceName': device,
+    browserName: 'Safari',
+    'appium:newCommandTimeout': 600,
+    'appium:safariInitialUrl': 'about:blank',
+    // First run on a fresh runner builds WebDriverAgent (~2-3 min) — the default
+    // 60s launch timeout isn't enough. Cached after the first build.
+    'appium:wdaLaunchTimeout': 240000,
+    'appium:wdaConnectionTimeout': 240000,
+  };
   if (version) caps['appium:platformVersion'] = version;
   const r = await wd.post('/session', { capabilities: { alwaysMatch: caps, firstMatch: [{}] } });
   const sid = r.value?.sessionId || r.sessionId;
