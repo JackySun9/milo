@@ -52,12 +52,18 @@ on:
         required: false
         default: '0'
         type: string
+      max_parallel:
+        description: 'Target parallel jobs (~= runner count). Each device x iOS is split into floor(max_parallel / combos) URL shards so one device uses the whole fleet.'
+        required: false
+        default: '4'
+        type: string
 
 jobs:
   prepare:
     runs-on: [self-hosted, macOS, ios-sim]
     outputs:
       matrix: ${{ steps.split.outputs.matrix }}
+      shards: ${{ steps.split.outputs.shards }}
     steps:
       - id: split
         shell: bash
@@ -76,26 +82,43 @@ jobs:
           }
           # true when $1 (min) <= $2 (chosen), using version-aware sort.
           ge() { [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | head -1)" = "$1" ]; }
-          inc=""
           IFS=',' read -ra DL <<< "${{ inputs.devices }}"
           IFS=',' read -ra VL <<< "${{ inputs.ios_versions }}"
+          pairs=()
           for dev in "${DL[@]}"; do
             dev="$(echo "$dev" | sed 's/^ *//;s/ *$//')"
             for ios in "${VL[@]}"; do
               ios="$(echo "$ios" | sed 's/^ *//;s/ *$//')"
               min="$(min_ios "$dev")"
               if ge "$min" "$ios"; then
-                inc="$inc{\"device\":\"$dev\",\"ios\":\"$ios\"},"
+                pairs+=("$dev|$ios")
               else
                 echo "::warning title=Skipped incompatible combo::$dev needs iOS $min+, skipping iOS $ios"
               fi
             done
           done
-          if [ -z "$inc" ]; then
+          n=${#pairs[@]}
+          if [ "$n" -eq 0 ]; then
             echo "::error title=No runnable combinations::None of the selected devices can run on the selected iOS version(s). e.g. iPhone 16 needs iOS 18+."
             exit 1
           fi
+          # Split each combo's URLs across several runners. Aim for ~max_parallel
+          # total jobs: one device fans out over the whole fleet (fast), while many
+          # combos stay at 1 shard each (no fixed-overhead blow-up, still 1 wave).
+          mp="${{ inputs.max_parallel }}"; [ -z "$mp" ] && mp=4
+          shards=$(( mp / n )); [ "$shards" -lt 1 ] && shards=1
+          inc=""
+          for p in "${pairs[@]}"; do
+            dev="${p%|*}"; ios="${p#*|}"
+            s=0
+            while [ "$s" -lt "$shards" ]; do
+              inc="$inc{\"device\":\"$dev\",\"ios\":\"$ios\",\"shard\":$s,\"shards\":$shards},"
+              s=$((s+1))
+            done
+          done
           echo "matrix={\"include\":[${inc%,}]}" >> "$GITHUB_OUTPUT"
+          echo "shards=$shards" >> "$GITHUB_OUTPUT"
+          echo "Prepared $n combo(s) x $shards shard(s) = $((n * shards)) parallel job(s)"
 
   capture:
     needs: prepare
@@ -120,13 +143,15 @@ jobs:
       - name: Ensure iOS runtime ${{ matrix.ios }}
         run: ./ios-runner/simulators.sh ensure "${{ matrix.ios }}" || true
 
-      - name: Capture ${{ matrix.device }} · iOS ${{ matrix.ios }} (Appium full-page)
+      - name: Capture ${{ matrix.device }} · iOS ${{ matrix.ios }} · shard ${{ matrix.shard }}/${{ matrix.shards }} (Appium full-page)
         env:
           SITE: ${{ inputs.site }}
           MILO_LIBS: ${{ inputs.milo_libs }}
           IOS_VERSION: ${{ matrix.ios }}
           IOS_DEVICE: ${{ matrix.device }}
           IOS_MAX_URLS: ${{ inputs.max_urls }}
+          IOS_SHARD_INDEX: ${{ matrix.shard }}
+          IOS_SHARD_TOTAL: ${{ matrix.shards }}
           S3_ACCESS_KEY_ID: ${{ secrets.S3ACCESSKEY }}
           S3_SECRET_ACCESS_KEY: ${{ secrets.S3SECRETKEY }}
         run: |
@@ -141,11 +166,11 @@ jobs:
           echo "Appium up on :4723"
           node nala/features/visual/sot-ios.run.js
 
-  # Fan-in: fold every iOS shard (one per device x version) into the live
+  # Fan-in: fold every iOS shard (device x version x URL-shard) into the live
   # results.json (which also holds desktop chrome/ipad/iphone) so /imagediff
   # shows everything side by side.
   publish:
-    needs: capture
+    needs: [prepare, capture]
     runs-on: [self-hosted, macOS, ios-sim]
     steps:
       - name: Checkout
@@ -165,6 +190,7 @@ jobs:
           SITE: ${{ inputs.site }}
           IOS_VERSIONS: ${{ inputs.ios_versions }}
           DEVICES: ${{ inputs.devices }}
+          SHARDS: ${{ needs.prepare.outputs.shards }}
           NALA_BASE: http://nala-auto.corp.adobe.com
           S3_ACCESS_KEY_ID: ${{ secrets.S3ACCESSKEY }}
           S3_SECRET_ACCESS_KEY: ${{ secrets.S3SECRETKEY }}
@@ -173,16 +199,22 @@ jobs:
           mkdir -p "$DIR"
           # Start from the currently-published results.json (desktop viewports).
           curl -sSf -o "$DIR/results.json" "$NALA_BASE/api/milo/screenshots/$SITE/results.json" || echo '{}' > "$DIR/results.json"
-          # Pull every iOS shard we just uploaded (one per device x version).
+          # Pull every iOS shard we just uploaded (device x version x URL-shard).
+          # Incompatible combos were never produced; their 404s are tolerated.
+          shards="${SHARDS:-1}"; [ "$shards" -lt 1 ] 2>/dev/null && shards=1
           IFS=',' read -ra VL <<< "$IOS_VERSIONS"
           IFS=',' read -ra DL <<< "$DEVICES"
           for v in "${VL[@]}"; do
             v="$(echo "$v" | sed 's/ //g')"
             for dev in "${DL[@]}"; do
               sl="$(echo "$dev" | tr -cd 'A-Za-z0-9')"
-              f="results-ios$v-$sl.json"
-              curl -sSf -o "$DIR/$f" "$NALA_BASE/api/milo/screenshots/$SITE/$f" \
-                && echo "✓ pulled $f" || echo "::warning::no $f on S3"
+              s=0
+              while [ "$s" -lt "$shards" ]; do
+                f="results-ios$v-$sl-s$s.json"
+                curl -sSf -o "$DIR/$f" "$NALA_BASE/api/milo/screenshots/$SITE/$f" \
+                  && echo "✓ pulled $f" || { echo "::warning::no $f on S3"; rm -f "$DIR/$f"; }
+                s=$((s+1))
+              done
             done
           done
           # Merge all iOS shards into results.json (iOS keys are distinct: <page>-ios<ver>-<device>).

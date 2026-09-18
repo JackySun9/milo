@@ -20,6 +20,7 @@
  * Optional: MILO_LIBS (?milolibs=stage), IOS_VERSION (e.g. 18.3; default newest),
  *   IOS_DEVICE (default 'iPhone 15'), IOS_SETTLE (secs, default 6),
  *   IOS_MAX_URLS (0 = all), APPIUM_URL,
+ *   IOS_SHARD_INDEX / IOS_SHARD_TOTAL (round-robin URL slice for parallel runners),
  *   S3_ACCESS_KEY_ID / S3_SECRET_ACCESS_KEY (both to upload).
  */
 const fs = require('fs');
@@ -179,17 +180,26 @@ async function main() {
   const version = process.env.IOS_VERSION || '';
   const settle = Number(process.env.IOS_SETTLE || 6);
   const vp = `ios${version}-${slug(device)}`;
-  const resultsFile = `results-${vp}.json`;
+
+  // URL sharding: this job captures only its slice of the site's URLs so the
+  // fleet can run one device across several runners in parallel. Round-robin
+  // (i % total) balances long/short pages across shards. Each shard writes a
+  // distinct results file; the publish job merges them back into one.
+  const shardIndex = Number(process.env.IOS_SHARD_INDEX || 0);
+  const shardTotal = Math.max(1, Number(process.env.IOS_SHARD_TOTAL || 1));
+  const resultsFile = `results-${vp}-s${shardIndex}.json`;
 
   const raw = await loadSiteData(site, { dir: __dirname });
   const allEntries = Object.entries(raw).filter(([k]) => !k.startsWith('__'));
   const maxUrls = Number(process.env.IOS_MAX_URLS || 0);
-  const entries = maxUrls > 0 ? allEntries.slice(0, maxUrls) : allEntries;
+  const limited = maxUrls > 0 ? allEntries.slice(0, maxUrls) : allEntries;
+  const entries = shardTotal > 1 ? limited.filter((_, i) => i % shardTotal === shardIndex) : limited;
   const folderPath = `${config.baseDir}/${site}`;
   validatePath(`${folderPath}/.touch`, { forWriting: true });
 
   console.log(`▶ ${device} · iOS ${version || '(latest)'} · Appium ${APPIUM}`);
-  console.log(`▶ Site: ${site} · URLs: ${entries.length} · MILO_LIBS: ${milolibs}`);
+  console.log(`▶ Site: ${site} · shard ${shardIndex + 1}/${shardTotal} · URLs: ${entries.length}/${limited.length} · MILO_LIBS: ${milolibs}`);
+  if (!entries.length) { console.log('▶ No URLs in this shard — nothing to capture.'); return; }
 
   // Resolve + create the EXACT device/runtime up front. If the pair is invalid
   // (e.g. iPhone 16 on iOS 17.5) this throws now, with a clear reason, instead
@@ -248,7 +258,7 @@ async function main() {
 
   if (config.s3.accessKeyId && config.s3.secretAccessKey) {
     console.log(`▶ Uploading images + ${resultsFile} to ${config.s3.endpoint}/${config.s3.bucket}/${folderPath}/`);
-    await uploadResultsDir(folderPath, { resultsFile, type: `-${vp}` });
+    await uploadResultsDir(folderPath, { resultsFile, type: `-${vp}-s${shardIndex}` });
     console.log('✓ Uploaded shard');
   } else {
     console.log('⚠ Skipping S3 upload (S3_ACCESS_KEY_ID / S3_SECRET_ACCESS_KEY not set)');
