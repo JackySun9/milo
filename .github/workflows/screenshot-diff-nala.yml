@@ -35,6 +35,11 @@ on:
           - graybox-upp
           - homepage
           - uar
+          - custom
+      custom_site:
+        description: 'Custom site name when site=custom, e.g. bacom-live-qa'
+        required: false
+        type: string
       viewports:
         description: 'Viewports (comma-separated)'
         required: false
@@ -51,8 +56,22 @@ jobs:
     name: ${{ inputs.site }} · ${{ inputs.viewports }}
     runs-on: [self-hosted, macOS, screendiff]
     timeout-minutes: 60
+    env:
+      SITE: ${{ inputs.site == 'custom' && inputs.custom_site || inputs.site }}
+      CUSTOM_SITE: ${{ inputs.custom_site }}
 
     steps:
+      - name: Validate site
+        run: |
+          if [ "${{ inputs.site }}" = "custom" ] && [ -z "$SITE" ]; then
+            echo "::error::custom_site is required when site=custom"
+            exit 1
+          fi
+          if [ "${{ inputs.site }}" != "custom" ] && [ -n "$CUSTOM_SITE" ]; then
+            echo "::error::custom_site must be empty unless site=custom"
+            exit 1
+          fi
+
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -70,7 +89,6 @@ jobs:
 
       - name: Run visual diff
         env:
-          SITE: ${{ inputs.site }}
           VIEWPORTS: ${{ inputs.viewports }}
           MILO_LIBS: ${{ inputs.milo_libs }}
           S3_ACCESS_KEY_ID: ${{ secrets.S3ACCESSKEY }}
@@ -81,11 +99,11 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: screenshot-diff-${{ inputs.site }}-${{ inputs.viewports }}
-          path: screenshots/${{ inputs.site }}/
+          name: screenshot-diff-${{ env.SITE }}-${{ inputs.viewports }}
+          path: screenshots/${{ env.SITE }}/
           retention-days: 7
 
       - name: Print result URL
         if: success()
         run: |
-          echo "::notice title=View results::http://nala-auto.corp.adobe.com/imagediff/${{ inputs.site }}"
+          echo "::notice title=View results::http://nala-auto.corp.adobe.com/imagediff/${{ env.SITE }}"

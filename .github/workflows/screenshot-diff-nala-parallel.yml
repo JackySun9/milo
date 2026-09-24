@@ -38,6 +38,11 @@ on:
           - graybox-upp
           - homepage
           - uar
+          - custom
+      custom_site:
+        description: 'Custom site name when site=custom, e.g. bacom-live-qa'
+        required: false
+        type: string
       milo_libs:
         description: 'Query string appended to URL B (the candidate)'
         required: false
@@ -47,6 +52,9 @@ on:
 jobs:
   capture:
     name: capture-${{ matrix.viewport }}
+    env:
+      SITE: ${{ inputs.site == 'custom' && inputs.custom_site || inputs.site }}
+      CUSTOM_SITE: ${{ inputs.custom_site }}
     strategy:
       fail-fast: false
       matrix:
@@ -55,6 +63,17 @@ jobs:
     timeout-minutes: 60
 
     steps:
+      - name: Validate site
+        run: |
+          if [ "${{ inputs.site }}" = "custom" ] && [ -z "$SITE" ]; then
+            echo "::error::custom_site is required when site=custom"
+            exit 1
+          fi
+          if [ "${{ inputs.site }}" != "custom" ] && [ -n "$CUSTOM_SITE" ]; then
+            echo "::error::custom_site must be empty unless site=custom"
+            exit 1
+          fi
+
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -72,7 +91,6 @@ jobs:
 
       - name: Run visual diff (this viewport only)
         env:
-          SITE: ${{ inputs.site }}
           VIEWPORTS: ${{ matrix.viewport }}
           SHARD_NAME: ${{ matrix.viewport }}
           MILO_LIBS: ${{ inputs.milo_libs }}
@@ -84,8 +102,8 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: results-${{ inputs.site }}-${{ matrix.viewport }}
-          path: screenshots/${{ inputs.site }}/results-${{ matrix.viewport }}.json
+          name: results-${{ env.SITE }}-${{ matrix.viewport }}
+          path: screenshots/${{ env.SITE }}/results-${{ matrix.viewport }}.json
           retention-days: 7
 
       # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -122,7 +140,6 @@ jobs:
       - name: Pull fresh chrome + ipad shards from S3
         if: matrix.viewport == 'iphone' && success()
         run: |
-          SITE="${{ inputs.site }}"
           mkdir -p "screenshots/$SITE"
           for shard in chrome ipad; do
             if curl -sSf -o "screenshots/$SITE/results-$shard.json" \
@@ -135,14 +152,14 @@ jobs:
 
       - name: Merge shards into results.json
         if: matrix.viewport == 'iphone' && success()
-        run: node tools/screenshot-diff/lib/merge.js screenshots/${{ inputs.site }}
+        run: node tools/screenshot-diff/lib/merge.js screenshots/$SITE
 
       - name: Upload merged results.json to S3
         if: matrix.viewport == 'iphone' && success()
         env:
           S3_ACCESS_KEY_ID: ${{ secrets.S3ACCESSKEY }}
           S3_SECRET_ACCESS_KEY: ${{ secrets.S3SECRETKEY }}
-        run: node tools/screenshot-diff/lib/upload-one.js screenshots/${{ inputs.site }}/results.json
+        run: node tools/screenshot-diff/lib/upload-one.js screenshots/$SITE/results.json
 
       - name: Write fresh timestamp + upload
         if: matrix.viewport == 'iphone' && success()
@@ -150,10 +167,10 @@ jobs:
           S3_ACCESS_KEY_ID: ${{ secrets.S3ACCESSKEY }}
           S3_SECRET_ACCESS_KEY: ${{ secrets.S3SECRETKEY }}
         run: |
-          node -e "require('fs').writeFileSync('screenshots/${{ inputs.site }}/timestamp.json', JSON.stringify([new Date().toLocaleString()], null, 2))"
-          node tools/screenshot-diff/lib/upload-one.js screenshots/${{ inputs.site }}/timestamp.json
+          node -e "require('fs').writeFileSync('screenshots/$SITE/timestamp.json', JSON.stringify([new Date().toLocaleString()], null, 2))"
+          node tools/screenshot-diff/lib/upload-one.js screenshots/$SITE/timestamp.json
 
       - name: Print result URL
         if: matrix.viewport == 'iphone' && success()
         run: |
-          echo "::notice title=View results::http://nala-auto.corp.adobe.com/imagediff/${{ inputs.site }}"
+          echo "::notice title=View results::http://nala-auto.corp.adobe.com/imagediff/$SITE"
