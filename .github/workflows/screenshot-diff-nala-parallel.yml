@@ -48,6 +48,15 @@ on:
         required: false
         default: '?milolibs=stage'
         type: string
+      urls:
+        description: 'Quick run: newline-separated URLs ("url" or "urlA | urlB") replacing the site list. Use with site=custom and a fresh custom_site.'
+        required: false
+        type: string
+      viewports:
+        description: 'Comma-separated subset of chrome,ipad,iphone to capture'
+        required: false
+        default: 'chrome,ipad,iphone'
+        type: string
 
 jobs:
   capture:
@@ -55,6 +64,10 @@ jobs:
     env:
       SITE: ${{ inputs.site == 'custom' && inputs.custom_site || inputs.site }}
       CUSTOM_SITE: ${{ inputs.custom_site }}
+      VIEWPORTS_IN: ${{ inputs.viewports || 'chrome,ipad,iphone' }}
+      # The matrix stays fixed because the iphone job owns the merge; a
+      # deselected viewport's job just skips its capture steps.
+      VP_ENABLED: ${{ contains(format(',{0},', inputs.viewports || 'chrome,ipad,iphone'), format(',{0},', matrix.viewport)) }}
     strategy:
       fail-fast: false
       matrix:
@@ -87,19 +100,22 @@ jobs:
         run: npm ci
 
       - name: Install Playwright browsers
+        if: env.VP_ENABLED == 'true'
         run: npx playwright install --with-deps chromium
 
       - name: Run visual diff (this viewport only)
+        if: env.VP_ENABLED == 'true'
         env:
           VIEWPORTS: ${{ matrix.viewport }}
           SHARD_NAME: ${{ matrix.viewport }}
           MILO_LIBS: ${{ inputs.milo_libs }}
+          URLS: ${{ inputs.urls }}
           S3_ACCESS_KEY_ID: ${{ secrets.S3ACCESSKEY }}
           S3_SECRET_ACCESS_KEY: ${{ secrets.S3SECRETKEY }}
         run: node nala/features/visual/sot.run.js
 
       - name: Upload shard JSON to GH artifacts
-        if: always()
+        if: always() && env.VP_ENABLED == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: results-${{ env.SITE }}-${{ matrix.viewport }}
@@ -142,6 +158,9 @@ jobs:
         run: |
           mkdir -p "screenshots/$SITE"
           for shard in chrome ipad; do
+            # Never merge a deselected viewport's shard — whatever is on S3
+            # for it is left over from an earlier run.
+            case ",$VIEWPORTS_IN," in *",$shard,"*) ;; *) echo "skip $shard (not selected)"; continue ;; esac
             if curl -sSf -o "screenshots/$SITE/results-$shard.json" \
                  "http://nala-auto.corp.adobe.com/api/milo/screenshots/$SITE/results-$shard.json"; then
               echo "✓ pulled $shard shard"

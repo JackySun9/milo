@@ -92,6 +92,48 @@ function rowsToSiteData(rows) {
   return out;
 }
 
+// Stable, filesystem-safe capture key for an ad-hoc URL: host + path, so
+// results read like the sheet-driven ones ("business-adobe-com-products").
+function keyForUrl(url) {
+  let base;
+  try {
+    const u = new URL(url);
+    base = `${u.hostname}${u.pathname}`;
+  } catch (e) {
+    base = url;
+  }
+  const key = base.toLowerCase().replace(/\.html?$/, '').replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return key.slice(0, 80) || 'page';
+}
+
+/**
+ * Parse an ad-hoc URL list (the Quick Run box in nala-auto) into the same
+ * object shape loadSiteData() returns. One entry per line:
+ *   https://x.com/page             -> milolibs mode (B = A + MILO_LIBS)
+ *   https://a.com/p | https://b.com/p  -> explicit A/B pair
+ * Blank lines and `#` comments are ignored; non-http(s) entries are rejected
+ * so a typo fails loudly instead of capturing nothing.
+ */
+function parseUrlList(text) {
+  const out = {};
+  const bad = [];
+  String(text || '').split(/\r?\n/).map((l) => l.trim())
+    .filter((l) => l && !l.startsWith('#'))
+    .forEach((line) => {
+      const [a, b] = line.split('|').map((s) => s.trim());
+      if (![a, b].filter(Boolean).every((u) => /^https?:\/\/\S+$/i.test(u))) {
+        bad.push(line);
+        return;
+      }
+      let key = keyForUrl(a);
+      for (let i = 2; out[key]; i += 1) key = `${keyForUrl(a)}-${i}`;
+      out[key] = b ? { a, b } : a;
+    });
+  if (bad.length) throw new Error(`Invalid URL line(s): ${bad.join(' ; ')}`);
+  return out;
+}
+
 // Load a site's page list: published sheet first, committed local yml as fallback.
 async function loadSiteData(site, options) {
   const opts = options || {};
@@ -118,4 +160,6 @@ async function loadSiteData(site, options) {
   return yaml.load(fs.readFileSync(localPath, 'utf8'));
 }
 
-module.exports = { loadSiteData, rowsToSiteData, extractRows, fetchJson };
+module.exports = {
+  loadSiteData, rowsToSiteData, extractRows, fetchJson, parseUrlList, keyForUrl,
+};

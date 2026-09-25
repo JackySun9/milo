@@ -33,7 +33,7 @@ const fs = require('fs');
 const { takeTwo } = require('../../../tools/screenshot-diff/lib/take.js');
 const { validatePath } = require('../../../tools/screenshot-diff/lib/utils.js');
 const { uploadResultsDir } = require('../../../tools/screenshot-diff/lib/upload-s3.js');
-const { loadSiteData } = require('../../../tools/screenshot-diff/lib/load-data.js');
+const { loadSiteData, parseUrlList } = require('../../../tools/screenshot-diff/lib/load-data.js');
 const config = require('../../../tools/screenshot-diff/lib/config.js');
 
 // All viewports run on Chromium. We still apply Playwright's iPad / iPhone
@@ -216,7 +216,11 @@ async function main() {
 
   // Page list comes from the SharePoint-published sheet when reachable, otherwise
   // the committed local sot.<site>.yml. See tools/screenshot-diff/lib/load-data.js.
-  const raw = await loadSiteData(site, { dir: __dirname });
+  // URLS (Quick Run from nala-auto) overrides the site's list entirely: an
+  // ad-hoc set of pages, no sheet or yml needed.
+  const raw = process.env.URLS
+    ? parseUrlList(process.env.URLS)
+    : await loadSiteData(site, { dir: __dirname });
   // `__config__` is a reserved top-level key for per-site options.
   // Everything else is a URL entry.
   const yamlConfig = raw.__config__ || {};
