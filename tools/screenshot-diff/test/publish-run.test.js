@@ -22,6 +22,8 @@ const {
   selectRunsForDeletion,
   parseRunKeys,
   stageRunCopy,
+  collectImagePaths,
+  uploadRunImages,
 } = require('../lib/publish-run.js');
 
 describe('run id + prefix construction', () => {
@@ -159,6 +161,89 @@ describe('stageRunCopy (filesystem integration)', () => {
       process.chdir(prevCwd);
       process.env.SCREENSHOT_BASE_DIR = prevBase;
       fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+});
+
+function inTmpScreenshots(fn) {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'sdiff-'));
+  const prevCwd = process.cwd();
+  try {
+    process.chdir(tmp);
+    const dir = 'screenshots/demo';
+    fs.mkdirSync(dir, { recursive: true });
+    return fn(dir);
+  } finally {
+    process.chdir(prevCwd);
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+}
+
+describe('collectImagePaths', () => {
+  test('lists a/b/diff across array and object entries, de-duplicated', () => {
+    const out = collectImagePaths({
+      x: [{ a: 'p/x-a.png', b: 'p/x-b.png', diff: 'p/x-diff.png' }, { a: 'p/x-a.png' }],
+      y: { a: 'p/y-a.png', urls: 'u' },
+      z: null,
+    });
+    assert.deepEqual(out.sort(), ['p/x-a.png', 'p/x-b.png', 'p/x-diff.png', 'p/y-a.png']);
+  });
+});
+
+describe('parallel matrix: images captured on sibling runners', () => {
+  test('staging tolerates non-local images and still points them at the run prefix', () => {
+    inTmpScreenshots((dir) => {
+      // Merging (iphone) runner: has its own PNGs, but not chrome's.
+      fs.writeFileSync(`${dir}/p-iphone-a.png`, 'I');
+      fs.writeFileSync(`${dir}/results.json`, JSON.stringify({
+        'p-chrome': [{ a: `${dir}/p-chrome-a.png`, b: `${dir}/p-chrome-b.png` }],
+        'p-iphone': [{ a: `${dir}/p-iphone-a.png` }],
+      }));
+
+      const { resultsPath, staged, remote } = stageRunCopy(dir, 'r9');
+      assert.deepEqual(staged, ['screenshots/demo/runs/r9/p-iphone-a.png']);
+      assert.deepEqual(remote.sort(), [`${dir}/p-chrome-a.png`, `${dir}/p-chrome-b.png`]);
+      const copied = JSON.parse(fs.readFileSync(resultsPath, 'utf-8'));
+      // Same key the chrome job's uploadRunImages writes to.
+      assert.equal(copied['p-chrome'][0].a, `${buildRunPrefix('demo', 'r9')}/p-chrome-a.png`);
+    });
+  });
+
+  test('uploadRunImages sends each local shard image to <run prefix>/<basename>', async () => {
+    const uploadPath = require.resolve('../lib/upload-s3.js');
+    const calls = [];
+    const prev = require.cache[uploadPath];
+    require.cache[uploadPath] = {
+      id: uploadPath,
+      filename: uploadPath,
+      loaded: true,
+      exports: { uploadFile: async (args) => { calls.push(args); } },
+    };
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'sdiff-'));
+    const prevCwd = process.cwd();
+    try {
+      process.chdir(tmp);
+      const dir = 'screenshots/demo';
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(`${dir}/p-chrome-a.png`, 'A');
+      fs.writeFileSync(`${dir}/p-chrome-b.png`, 'B');
+      fs.writeFileSync(`${dir}/results-chrome.json`, JSON.stringify({
+        'p-chrome': [{ a: `${dir}/p-chrome-a.png`, b: `${dir}/p-chrome-b.png`, diff: `${dir}/gone.png` }],
+      }));
+
+      const res = await uploadRunImages({
+        dir, site: 'demo', runId: 'r9', resultsFile: 'results-chrome.json',
+      });
+      assert.equal(res.uploaded, 2);
+      assert.deepEqual(res.missing, [`${dir}/gone.png`]);
+      assert.deepEqual(calls.map((c) => c.s3Key).sort(), [
+        'screenshots/demo/runs/r9/p-chrome-a.png',
+        'screenshots/demo/runs/r9/p-chrome-b.png',
+      ]);
+    } finally {
+      process.chdir(prevCwd);
+      fs.rmSync(tmp, { recursive: true, force: true });
+      if (prev) require.cache[uploadPath] = prev; else delete require.cache[uploadPath];
     }
   });
 });

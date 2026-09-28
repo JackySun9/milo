@@ -210,26 +210,60 @@ function parseRunKeys(keys, site) {
  * @param {string} [resultsFile='results.json']
  * @returns {{runDir: string, resultsPath: string}}
  */
+/**
+ * Every image path (a, b, diff) referenced by a results object, de-duplicated.
+ * @param {object} results
+ * @returns {string[]}
+ */
+function collectImagePaths(results) {
+  const out = new Set();
+  Object.values(results || {}).forEach((value) => {
+    (Array.isArray(value) ? value : [value]).forEach((entry) => {
+      if (!entry || typeof entry !== 'object') return;
+      ['a', 'b', 'diff'].forEach((k) => {
+        if (typeof entry[k] === 'string' && entry[k]) out.add(entry[k]);
+      });
+    });
+  });
+  return [...out];
+}
+
+function isLocalFile(p) {
+  try {
+    return fs.statSync(validatePath(p)).isFile();
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Copy a completed results directory into `<dir>/runs/<runId>/`, rewriting the
+ * image paths so the copy is self-contained.
+ *
+ * In the parallel matrix each viewport job captures on its own runner, so the
+ * merging job only has its own viewport's PNGs on disk. Images that aren't
+ * local are not an error: their viewport job uploads them to the run prefix
+ * itself (see uploadRunImages).
+ * @param {string} dir - e.g. screenshots/bacom
+ * @param {string} runId
+ * @param {string} [resultsFile='results.json']
+ * @returns {{runDir: string, resultsPath: string, staged: string[], remote: string[]}}
+ */
 function stageRunCopy(dir, runId, resultsFile = 'results.json') {
   const runDir = `${dir}/runs/${sanitizeRunId(runId)}`;
   const sourceResults = JSON.parse(fs.readFileSync(validatePath(`${dir}/${resultsFile}`), 'utf-8'));
   validatePath(`${runDir}/.touch`, { forWriting: true }); // creates runDir
 
-  Object.values(sourceResults).forEach((value) => {
-    const entries = Array.isArray(value) ? value : [value];
-    entries.forEach((entry) => {
-      if (!entry || typeof entry !== 'object') return;
-      ['a', 'b', 'diff'].forEach((k) => {
-        const src = entry[k];
-        if (!src) return;
-        const dest = `${runDir}/${path.basename(src)}`;
-        try {
-          fs.copyFileSync(validatePath(src), validatePath(dest, { forWriting: true }));
-        } catch (err) {
-          console.warn(`⚠ Could not stage ${src} for run ${runId}: ${err.message}`);
-        }
-      });
-    });
+  const staged = [];
+  const remote = [];
+  collectImagePaths(sourceResults).forEach((src) => {
+    if (!isLocalFile(src)) {
+      remote.push(src);
+      return;
+    }
+    const dest = `${runDir}/${path.basename(src)}`;
+    fs.copyFileSync(validatePath(src), validatePath(dest, { forWriting: true }));
+    staged.push(dest);
   });
 
   const rewritten = rewriteResultsPaths(sourceResults, dir, runDir);
@@ -238,7 +272,37 @@ function stageRunCopy(dir, runId, resultsFile = 'results.json') {
     validatePath(resultsPath, { forWriting: true }),
     JSON.stringify(rewritten, null, 2),
   );
-  return { runDir, resultsPath };
+  return {
+    runDir, resultsPath, staged, remote,
+  };
+}
+
+/**
+ * Upload the images referenced by one results file (e.g. a viewport shard)
+ * straight into the run's immutable prefix. Run by every viewport job, so each
+ * run owns its own copy regardless of which runner captured it.
+ * @param {object} args
+ * @param {string} args.dir
+ * @param {string} args.site
+ * @param {string} args.runId
+ * @param {string} args.resultsFile - e.g. results-chrome.json
+ * @returns {Promise<{uploaded: number, missing: string[]}>}
+ */
+async function uploadRunImages({
+  dir, site, runId, resultsFile,
+}) {
+  const prefix = buildRunPrefix(site, runId);
+  const results = JSON.parse(fs.readFileSync(validatePath(`${dir}/${resultsFile}`), 'utf-8'));
+  const missing = [];
+  const local = collectImagePaths(results).filter((p) => {
+    if (isLocalFile(p)) return true;
+    missing.push(p);
+    return false;
+  });
+  await Promise.all(local.map((p) => s3Uploads().uploadFile({
+    fileName: p, s3Path: '.', s3Key: `${prefix}/${path.basename(p)}`, mimeType: 'image/png',
+  })));
+  return { uploaded: local.length, missing };
 }
 
 // Read the existing run index through the public read path (same origin the UI
@@ -338,8 +402,23 @@ async function publishRun({
   dir, site, runId, keep = DEFAULT_KEEP,
 }) {
   const id = sanitizeRunId(runId);
-  const { runDir } = stageRunCopy(dir, id);
-  await s3Uploads().uploadResultsDir(runDir, { resultsFile: 'results.json', type: '' });
+  const {
+    runDir, resultsPath, staged, remote,
+  } = stageRunCopy(dir, id);
+  const upload = (fileName, mimeType) => s3Uploads().uploadFile({
+    fileName, s3Path: '.', s3Key: fileName, mimeType,
+  });
+  await Promise.all(staged.map((p) => upload(p, 'image/png')));
+  if (remote.length) {
+    console.log(`  ${remote.length} image(s) captured on sibling runners — uploaded there by their viewport job`);
+  }
+  const timestampPath = `${runDir}/timestamp.json`;
+  fs.writeFileSync(
+    validatePath(timestampPath, { forWriting: true }),
+    JSON.stringify([new Date().toLocaleString()], null, 2),
+  );
+  await upload(resultsPath, 'application/json');
+  await upload(timestampPath, 'application/json');
 
   const entry = {
     runId: id,
@@ -391,21 +470,36 @@ module.exports = {
   pruneRunIndex,
   selectRunsForDeletion,
   parseRunKeys,
+  collectImagePaths,
   stageRunCopy,
+  uploadRunImages,
   publishRun,
 };
 
-// CLI: `node publish-run.js screenshots/<site> <site> <runId> [keep]`
+// CLI:
+//   node publish-run.js screenshots/<site> <site> <runId> [keep]
+//   node publish-run.js screenshots/<site> <site> <runId> --images results-<viewport>.json
 if (require.main === module) {
-  const [dir, site, runId, keep] = process.argv.slice(2);
+  const [dir, site, runId, flag, arg] = process.argv.slice(2);
   if (!dir || !site || !runId) {
-    console.error('Usage: node publish-run.js <dir> <site> <runId> [keep]');
+    console.error('Usage: node publish-run.js <dir> <site> <runId> [keep | --images <resultsFile>]');
     process.exit(1);
   }
-  publishRun({
-    dir, site, runId, keep: keep ? Number(keep) : DEFAULT_KEEP,
-  }).catch((err) => {
-    // Versioned publishing must never fail an otherwise-green screenshot run.
-    console.warn(`::warning::Versioned publish failed: ${err.message}`);
-  });
+  if (flag === '--images') {
+    uploadRunImages({
+      dir, site, runId, resultsFile: arg,
+    }).then(({ uploaded, missing }) => {
+      console.log(`✓ Uploaded ${uploaded} image(s) to ${buildRunPrefix(site, runId)}/`);
+      if (missing.length) console.warn(`::warning::${missing.length} image(s) referenced but not on disk`);
+    }).catch((err) => {
+      console.warn(`::warning::Versioned image upload failed: ${err.message}`);
+    });
+  } else {
+    publishRun({
+      dir, site, runId, keep: flag ? Number(flag) : DEFAULT_KEEP,
+    }).catch((err) => {
+      // Versioned publishing must never fail an otherwise-green screenshot run.
+      console.warn(`::warning::Versioned publish failed: ${err.message}`);
+    });
+  }
 }

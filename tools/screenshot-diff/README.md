@@ -182,6 +182,13 @@ can open a specific historical run by fetching:
 /api/milo/screenshots/<site>/runs/<run_id>/results.json
 ```
 
+In the parallel matrix each viewport captures on its own runner, so each
+viewport job uploads **its own** PNGs into `runs/<run_id>/` right after capture
+(`publish-run.js … --images results-<viewport>.json`). The iphone job's final
+publish then writes only the merged `results.json`, `timestamp.json` and the
+index. Copying from the shared latest keys instead would be wrong: a second run
+of the same site (e.g. stage vs. a branch) overwrites them.
+
 ### Retention
 
 CI/CD artifacts are short-lived:
