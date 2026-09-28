@@ -18,6 +18,7 @@ const {
   isEphemeralSite,
   rewriteResultsPaths,
   buildRunIndex,
+  pruneRunIndex,
   selectRunsForDeletion,
   parseRunKeys,
   stageRunCopy,
@@ -97,6 +98,17 @@ describe('buildRunIndex', () => {
 
   test('tolerates a missing/invalid previous index', () => {
     assert.deepEqual(buildRunIndex(null, { runId: 'a' }).map((e) => e.runId), ['a']);
+  });
+});
+
+describe('pruneRunIndex', () => {
+  test('drops deleted runs so the viewer never lists missing results', () => {
+    const index = [{ runId: 'd' }, { runId: 'c' }, { runId: 'b' }, { runId: 'a' }];
+    assert.deepEqual(pruneRunIndex(index, ['b', 'a']).map((e) => e.runId), ['d', 'c']);
+  });
+
+  test('tolerates a missing index', () => {
+    assert.deepEqual(pruneRunIndex(null, ['a']), []);
   });
 });
 

@@ -145,6 +145,17 @@ function buildRunIndex(existing, entry) {
 }
 
 /**
+ * Drop deleted runs from the index so viewers never list a run whose files are gone.
+ * @param {Array} index - run index, newest first
+ * @param {string[]} deleted - run ids that were removed
+ * @returns {Array}
+ */
+function pruneRunIndex(index, deleted) {
+  const gone = new Set(deleted);
+  return (Array.isArray(index) ? index : []).filter((e) => e && !gone.has(e.runId));
+}
+
+/**
  * Pure retention selection: which run ids should be deleted.
  *
  * `runs` is ordered newest-first. Unknown runs discovered on S3 but absent from
@@ -337,13 +348,16 @@ async function publishRun({
   };
   const index = buildRunIndex(await readRunIndex(site), entry);
   const indexPath = `${dir}/runs/index.json`;
-  fs.writeFileSync(
-    validatePath(indexPath, { forWriting: true }),
-    JSON.stringify(index, null, 2),
-  );
-  await s3Uploads().uploadFile({
-    fileName: indexPath, s3Path: '.', s3Key: buildRunIndexKey(site), mimeType: 'application/json',
-  });
+  const writeIndex = async (list) => {
+    fs.writeFileSync(
+      validatePath(indexPath, { forWriting: true }),
+      JSON.stringify(list, null, 2),
+    );
+    await s3Uploads().uploadFile({
+      fileName: indexPath, s3Path: '.', s3Key: buildRunIndexKey(site), mimeType: 'application/json',
+    });
+  };
+  await writeIndex(index);
   console.log(`✓ Published run ${id} → ${buildRunPrefix(site, id)}/`);
 
   // Retention is best effort: a failure here must not fail the screenshot run.
@@ -355,6 +369,7 @@ async function publishRun({
     if (doomed.length) {
       console.log(`▶ Retention: keeping newest ${keep}, deleting ${doomed.length}`);
       await deleteRuns(site, doomed);
+      await writeIndex(pruneRunIndex(index, doomed));
     }
   } catch (err) {
     console.warn(`⚠ Run cleanup skipped: ${err.message}`);
@@ -373,6 +388,7 @@ module.exports = {
   isEphemeralSite,
   rewriteResultsPaths,
   buildRunIndex,
+  pruneRunIndex,
   selectRunsForDeletion,
   parseRunKeys,
   stageRunCopy,
