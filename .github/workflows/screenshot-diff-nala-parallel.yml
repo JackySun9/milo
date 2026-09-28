@@ -57,10 +57,23 @@ on:
         required: false
         default: 'chrome,ipad,iphone'
         type: string
+      figma_url:
+        description: 'Figma compare: share URL with node-id (e.g. https://www.figma.com/design/KEY/Name?node-id=83-45998). When set, runs the single-element Figma comparison instead of the dataset capture.'
+        required: false
+        type: string
+      selector:
+        description: 'Figma compare: CSS selector of the web element to compare. Must match exactly one element. Required when figma_url is set.'
+        required: false
+        type: string
+      run_id:
+        description: 'Version id for the immutable per-run copy on S3. Defaults to this GitHub run id.'
+        required: false
+        type: string
 
 jobs:
   capture:
     name: capture-${{ matrix.viewport }}
+    if: inputs.figma_url == ''
     env:
       SITE: ${{ inputs.site == 'custom' && inputs.custom_site || inputs.site }}
       CUSTOM_SITE: ${{ inputs.custom_site }}
@@ -180,6 +193,14 @@ jobs:
           S3_SECRET_ACCESS_KEY: ${{ secrets.S3SECRETKEY }}
         run: node tools/screenshot-diff/lib/upload-one.js screenshots/$SITE/results.json
 
+      - name: Publish immutable versioned copy of this run
+        if: matrix.viewport == 'iphone' && success()
+        env:
+          S3_ACCESS_KEY_ID: ${{ secrets.S3ACCESSKEY }}
+          S3_SECRET_ACCESS_KEY: ${{ secrets.S3SECRETKEY }}
+          RUN_ID: ${{ inputs.run_id || github.run_id }}
+        run: node tools/screenshot-diff/lib/publish-run.js screenshots/$SITE "$SITE" "$RUN_ID"
+
       - name: Write fresh timestamp + upload
         if: matrix.viewport == 'iphone' && success()
         env:
@@ -191,5 +212,74 @@ jobs:
 
       - name: Print result URL
         if: matrix.viewport == 'iphone' && success()
+        run: |
+          echo "::notice title=View results::http://nala-auto.corp.adobe.com/imagediff/$SITE"
+
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  # Figma compare: ONE Figma node vs ONE DOM element, ONE viewport.
+  # Writes the same results.json shape as the dataset capture, so
+  # /imagediff/<site> renders it with no UI change.
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  figma-compare:
+    name: figma-compare
+    if: inputs.figma_url != ''
+    env:
+      SITE: ${{ inputs.site == 'custom' && inputs.custom_site || inputs.site }}
+    runs-on: [self-hosted, macOS, screendiff]
+    timeout-minutes: 30
+
+    steps:
+      - name: Validate figma inputs
+        run: |
+          if [ -z "$SITE" ]; then
+            echo "::error::custom_site is required when site=custom"
+            exit 1
+          fi
+          if [ -z "${{ inputs.selector }}" ]; then
+            echo "::error::selector is required when figma_url is set"
+            exit 1
+          fi
+          if [ -z "${{ inputs.urls }}" ]; then
+            echo "::error::urls must contain exactly one web URL when figma_url is set"
+            exit 1
+          fi
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install milo dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Run Figma vs web comparison
+        env:
+          FIGMA_URL: ${{ inputs.figma_url }}
+          SELECTOR: ${{ inputs.selector }}
+          URLS: ${{ inputs.urls }}
+          VIEWPORTS: ${{ inputs.viewports || 'chrome' }}
+          RUN_ID: ${{ inputs.run_id || github.run_id }}
+          FIGMA_TOKEN: ${{ secrets.FIGMA_TOKEN }}
+          S3_ACCESS_KEY_ID: ${{ secrets.S3ACCESSKEY }}
+          S3_SECRET_ACCESS_KEY: ${{ secrets.S3SECRETKEY }}
+        run: node nala/features/visual/figma.run.js
+
+      - name: Upload results JSON to GH artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: results-figma-${{ env.SITE }}
+          path: screenshots/${{ env.SITE }}/results.json
+          retention-days: 7
+
+      - name: Print result URL
+        if: success()
         run: |
           echo "::notice title=View results::http://nala-auto.corp.adobe.com/imagediff/$SITE"

@@ -104,6 +104,21 @@ Configured at the `adobecom` org level (or repo level on this fork):
 |---|---|
 | `SCREENSHOT_S3_ACCESS_KEY_ID` | S3 write key |
 | `SCREENSHOT_S3_SECRET_ACCESS_KEY` | S3 write secret |
+| `FIGMA_TOKEN` | **Figma compare only** — read-only Figma personal access token |
+
+### FIGMA_TOKEN setup
+
+1. In Figma: **Account settings → Security → Personal access tokens →
+   Generate new token**.
+2. Scope it **read-only**: `File content: Read`. No write scopes are needed —
+   the runner only calls `GET /v1/images/:file_key`.
+3. The token's account must be able to open the design file being compared.
+4. Add it as a repository (or org) secret named `FIGMA_TOKEN`. The workflow
+   passes it to the runner as the `FIGMA_TOKEN` env var; it is never logged.
+
+A missing or unauthorized token fails the run explicitly
+(`FIGMA_TOKEN is required…` / `HTTP 403 (check FIGMA_TOKEN scope / file access)`)
+rather than producing an empty diff.
 
 Optional repository/org **variables** (not secrets) for overrides:
 `SCREENSHOT_S3_REGION`, `SCREENSHOT_S3_ENDPOINT`, `SCREENSHOT_S3_BUCKET`.
@@ -119,6 +134,8 @@ tools/screenshot-diff/
 ├── index.html, .js, .css      ← Milo tool UI
 └── lib/
     ├── config.js              ← env-driven S3 + path config
+    ├── figma.js               ← Figma URL parsing + node PNG export
+    ├── publish-run.js         ← versioned per-run publish + retention
     ├── take.js                ← Playwright screenshot helpers
     ├── compare.mjs            ← pixel diff w/ baseline fetch
     ├── merge.js               ← merge per-worker results
@@ -136,13 +153,111 @@ milo/                                    (bucket)
         ├── shot-a.png                   (URL A capture)
         ├── shot-b.png                   (URL B capture)
         ├── shot-diff.png                (only if pixels differ)
-        ├── results.json                 (run metadata)
-        └── timestamp.json               (last run wall-clock time)
+        ├── results.json                 (run metadata — LATEST)
+        ├── timestamp.json               (last run wall-clock time)
+        └── runs/                        (immutable per-run history)
+            ├── index.json               (newest-first run list)
+            └── <run_id>/
+                ├── shot-a.png
+                ├── shot-b.png
+                ├── shot-diff.png
+                ├── results.json
+                └── timestamp.json
 ```
 
-Each new run **overwrites** the previous one for that project. Run history
-is kept via GitHub Actions artifact retention (7 days) and any S3 lifecycle
-rules configured on the bucket.
+### Latest vs. versioned
+
+The **latest** keys above are written exactly as before, so
+`http://nala-auto.corp.adobe.com/imagediff/<site>` and every existing
+`.../api/milo/screenshots/<site>/results.json` URL are unchanged.
+
+In addition, each run publishes an **immutable copy** under
+`screenshots/<site>/runs/<run_id>/`, where `run_id` is the workflow's `run_id`
+input (defaults to the GitHub run id). The images inside that copy are
+self-contained — `results.json` there points at the versioned PNGs — so the UI
+can open a specific historical run by fetching:
+
+```
+/api/milo/screenshots/<site>/runs/index.json          → [{ runId, timestamp, results }, …]
+/api/milo/screenshots/<site>/runs/<run_id>/results.json
+```
+
+### Retention
+
+CI/CD artifacts are short-lived:
+
+* After each successful publish the runner keeps the **newest 3** runs per
+  site and deletes the rest (override with `SCREENSHOT_KEEP_RUNS`). A run
+  whose prefix contains a `.keep` object is never deleted.
+* Cleanup is best effort — a retention failure logs a warning and never fails
+  the screenshot run.
+* Recommended S3 lifecycle rules on the bucket (configured outside this repo):
+
+  | Prefix | Expiration |
+  |---|---|
+  | `screenshots/` (dataset sites) | 7 days |
+  | ephemeral `quick-*` / `figma-*` sites | 1 day |
+
+  GitHub Actions artifact retention stays at 7 days.
+
+## Figma compare (single element)
+
+Compares **one** Figma node against **one** DOM element, at **one** viewport.
+Same `results.json` shape as a dataset run, so `/imagediff/<site>` renders it
+with no UI change.
+
+Dispatch `screenshot-diff-nala-parallel.yml` with:
+
+| Input | Required | Meaning |
+|---|---|---|
+| `site` / `custom_site` | yes | output slug, e.g. `custom` + `figma-marquee` |
+| `figma_url` | yes | share URL **with** `node-id`, e.g. `https://www.figma.com/design/KEY/Name?node-id=83-45998` |
+| `selector` | yes | CSS selector; must match **exactly one** element |
+| `urls` | yes | exactly one web URL (no `a \| b` pairs, no multi-line) |
+| `viewports` | no | exactly one of `chrome`, `ipad`, `iphone` (default `chrome`) |
+| `run_id` | no | version id for the immutable copy (default: GitHub run id) |
+
+Setting `figma_url` switches the workflow to the `figma-compare` job; the
+3-viewport dataset matrix is skipped. Leaving it empty preserves ordinary
+dataset and Quick run behavior exactly.
+
+Output semantics: `a` = Figma baseline, `b` = live web capture, `diff` present
+only when pixels differ, `urls` = `"<figma_url> | <web_url>"`.
+
+The Figma node is exported at `scale=1` (`FIGMA_EXPORT_SCALE` overrides) and
+normalized to the web capture's exact pixel dimensions — scaled to its width
+with aspect preserved, top-aligned on a white canvas of its height — because
+the pixel comparator rejects mismatched sizes. Height differences therefore
+surface as diff pixels instead of hard-failing.
+
+Explicit failures (no silent pass): malformed/non-Figma URL, missing
+`node-id`, missing `FIGMA_TOKEN`, missing `selector`, selector matching zero or
+more than one element, zero-sized element, Figma export/download errors, and
+multi-URL or multi-viewport input.
+
+Local run:
+
+```bash
+SITE=figma-marquee \
+FIGMA_URL='https://www.figma.com/design/KEY/Name?node-id=83-45998' \
+SELECTOR='.marquee' \
+URLS='https://business.adobe.com/' \
+VIEWPORTS=chrome FIGMA_TOKEN=figd_xxx \
+node nala/features/visual/figma.run.js
+```
+
+## Tests
+
+```bash
+npm run test:screenshot-diff   # node --test, no browser or AWS creds needed
+```
+
+Covers Figma URL parsing/validation (hyphen→colon node-id normalization,
+already-colon forms, malformed input), the images API URL builder, input
+guards, PNG size reading, a mocked end-to-end Figma export (including null /
+missing image-map entries and auth failures), and the versioning helpers
+(run-id sanitization, prefix construction, retention selection, path
+rewriting, staged run copy).
 
 ## Origin
 
