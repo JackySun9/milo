@@ -1,0 +1,15 @@
+{
+  "name": "@adobecom/milo-bc-agent",
+  "private": true,
+  "type": "module",
+  "version": "0.1.0",
+  "description": "Drives Brand Concierge chat like a user: scripted test-plan scenarios plus an explorer that follows suggested prompts and CTAs, then writes an HTML report.",
+  "scripts": {
+    "start": "node run.mjs",
+    "workflow:business-stage": "node workflow-business-stage.mjs",
+    "test": "node --test test/*.test.js"
+  },
+  "dependencies": {
+    "playwright": "1.58.0"
+  }
+}

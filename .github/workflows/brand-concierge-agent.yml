@@ -1,0 +1,88 @@
+name: Brand Concierge Agent
+
+# Runs the standard Brand Concierge health-check workflow (tools/bc-agent)
+# against any Brand Concierge page, on the same self-hosted Mac mini pool
+# used by screenshot-diff (see screenshot-diff-nala-parallel.yml).
+#
+# Triggered by nala-auto's workflow_dispatch, the same architecture as
+# screenshot-diff: nala-auto dispatches this workflow, the runner does the
+# work, and results are published as a GitHub Actions artifact that
+# nala-auto can link back to via the run URL.
+#
+# This is a non-LLM "standard workflow" run (agent explores suggested
+# prompts/CTAs and classifies which widgets rendered) so no API keys or
+# secrets are required.
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: 'Version id for this run, used in the artifact name. Defaults to this GitHub run id.'
+        required: false
+        type: string
+      url:
+        description: 'Brand Concierge page to test (any http(s) URL: stage, prod, or a branch/AEM preview build).'
+        required: true
+        default: 'https://business.stage.adobe.com/?milolibs=stage'
+        type: string
+
+jobs:
+  run-agent:
+    name: brand-concierge-agent
+    runs-on: [self-hosted, macOS, screendiff]
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: tools/bc-agent
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate url
+        run: |
+          case "${{ inputs.url }}" in
+            http://*|https://*) ;;
+            *) echo "::error::url must be an http(s) URL, got: ${{ inputs.url }}"; exit 1 ;;
+          esac
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: tools/bc-agent/package-lock.json
+
+      - name: Install bc-agent dependencies
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run standard business-stage workflow
+        env:
+          BC_WORKFLOW_URL: ${{ inputs.url }}
+          BC_WORKFLOW_OUT: ${{ github.workspace }}/tools/bc-agent/reports/run
+        run: node workflow-business-stage.mjs
+
+      - name: Set artifact name
+        if: always()
+        id: artifact
+        run: echo "name=bc-agent-${{ inputs.run_id || github.run_id }}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload report (HTML, JSON, summary, screenshots)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.artifact.outputs.name }}
+          path: tools/bc-agent/reports/run/
+          retention-days: 7
+          if-no-files-found: warn
+
+      - name: Print result
+        if: always()
+        run: |
+          if [ -f reports/run/workflow-summary.md ]; then
+            cat reports/run/workflow-summary.md
+          fi
+          echo "::notice title=View results::Artifact ${{ steps.artifact.outputs.name }} on run ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
