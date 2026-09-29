@@ -70,7 +70,10 @@ export function referencedShots(report = {}, summary = {}) {
     addTurns(sc.turns);
     (sc.extraShots || []).forEach((shot) => shot && names.add(shot));
   });
-  (report.explore?.paths || []).forEach((path) => addTurns(path.turns));
+  (report.explore?.paths || []).forEach((path) => {
+    addTurns(path.turns);
+    if (path.errorShot) names.add(path.errorShot);
+  });
   (summary.checks || []).forEach((check) => check.screenshot && names.add(check.screenshot));
   return [...names];
 }

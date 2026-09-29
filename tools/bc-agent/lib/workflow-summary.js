@@ -61,7 +61,7 @@ function allTurns(report) {
 
 // Pick one representative screenshot for a check: the first turn whose reply
 // shows the preferred widget set; otherwise the last captured turn of the
-// seed path most likely to reach it.
+// seed path most likely to reach it, or that path's error-state screenshot.
 export function selectEvidence(report, check) {
   const turns = allTurns(report).filter((turn) => turn.shot);
   for (const kinds of check.evidence) {
@@ -71,6 +71,9 @@ export function selectEvidence(report, check) {
   const fromSeed = turns.filter((turn) => check.seed.test(turn.seed || ''));
   const fallback = fromSeed[fromSeed.length - 1];
   if (fallback) return { screenshot: fallback.shot, evidence: 'fallback', turn: fallback.label, seed: fallback.seed };
+  // The seed path never produced a turn: show the page state it failed in.
+  const failed = (report.explore?.paths || []).find((path) => path.errorShot && check.seed.test(path.seed || ''));
+  if (failed) return { screenshot: failed.errorShot, evidence: 'error-state', turn: null, seed: failed.seed };
   return { screenshot: null, evidence: 'none', turn: null, seed: null };
 }
 

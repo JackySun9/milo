@@ -84,7 +84,11 @@ Each check in `workflow-summary.json` has `pass`, `status` (`pass` / `review`,
 or `error` when the agent crashed before writing a report) and one evidence
 `screenshot` (a file name next to the summary). `evidence` is `observed` when
 the screenshot shows the widget that proves the check, `fallback` when it is
-the last turn of the seed path meant to reach it, or `none`.
+the last turn of the seed path meant to reach it, `error-state` when that
+path failed before any turn (a screenshot of the page when it failed), or
+`none`. Explorer paths that error or capture no turns are retried once,
+sequentially, after the parallel pass; the retry replaces the path only if it
+captured turns (`retried`, `firstError`/`retryError` record what happened).
 
 ### Publishing to S3
 

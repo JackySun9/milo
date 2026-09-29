@@ -28,7 +28,11 @@ export function renderReport(r) {
   const exp = r.explore ? `
     <h2>Explorer — workflows reached</h2>
     <table>${Object.entries(r.explore.coverage).sort().map(([k, v]) => `<tr><td><code>${esc(k)}</code></td><td>${v.length}×</td><td class="d">${esc(v[0].path)}</td></tr>`).join('')}</table>
-    ${r.explore.paths.map((p) => `<details><summary><b>${esc(p.seed)}</b> <small>${p.turns.length} turn(s)${p.persona ? ' · persona' : ''}</small></summary>${transcriptHtml(p.turns)}</details>`).join('')}` : '';
+    ${r.explore.paths.map((p) => `<details ${p.error ? 'open' : ''}><summary><b>${esc(p.seed)}</b> <small>${p.turns.length} turn(s)${p.persona ? ' · persona' : ''}${p.retried ? ' · retried' : ''}</small></summary>
+      ${p.error ? `<div class="err">${esc(p.error)}${p.retryError ? ` · retry: ${esc(p.retryError)}` : ''}</div>` : ''}
+      ${p.firstError ? `<div class="d">First attempt failed: ${esc(p.firstError)}</div>` : ''}
+      ${transcriptHtml(p.turns)}
+      ${p.errorShot ? `<a href="${esc(p.errorShot)}" target="_blank"><img src="${esc(p.errorShot)}" loading="lazy" alt="Page state when this path failed"></a>` : ''}</details>`).join('')}` : '';
 
   const t = r.totals || {};
   const rates = r.passRates ? `<h2>Pass rate (--repeat)</h2><table>${r.passRates.map((p) => `<tr><td><b>${esc(p.id)}</b></td><td>${esc(p.title)}</td><td>${p.pass}/${p.runs}</td></tr>`).join('')}</table>` : '';

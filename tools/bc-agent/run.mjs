@@ -12,7 +12,9 @@ import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { BcChat } from './lib/chat.js';
 import { SCENARIOS, MANUAL_ONLY } from './scenarios.js';
-import { DEFAULT_SEEDS, nextMoves, personaConfig, personaMove } from './lib/explore.js';
+import {
+  DEFAULT_SEEDS, nextMoves, personaConfig, personaMove, needsRetry, mergeRetry,
+} from './lib/explore.js';
 import { renderReport } from './lib/report.js';
 
 const { values: a } = parseArgs({
@@ -48,13 +50,22 @@ let apiCalls = 0;
 
 const browser = await chromium.launch({ headless: !a.headed });
 
-async function withChat(viewport, fn) {
+// errorShot: file name for a full-page screenshot of the state the page was
+// in when fn (or opening the chat) threw; attached to the error as e.shot.
+async function withChat(viewport, fn, { errorShot } = {}) {
   const ctx = await browser.newContext({ viewport: viewport || { width: 1440, height: 900 } });
   const page = await ctx.newPage();
   const chat = new BcChat(page, { replyTimeout: opts.replyTimeout });
   try {
     await chat.open(url);
     return await fn(chat, page);
+  } catch (e) {
+    if (errorShot) {
+      await page.screenshot({ path: join(outDir, errorShot), fullPage: false, timeout: 15000 })
+        .then(() => { e.shot = errorShot; })
+        .catch(() => {});
+    }
+    throw e;
   } finally {
     apiCalls += chat.calls.length;
     await ctx.close();
@@ -130,12 +141,13 @@ async function runScenario(sc) {
   return res;
 }
 
-async function explorePath(seed, idx, tried, cfg) {
-  const path = { seed, turns: [], persona: !!cfg };
-  console.log(`🔎 explore: ${seed}`);
+async function explorePath(seed, idx, tried, cfg, attempt = 1) {
+  const path = { seed, turns: [], persona: !!cfg, attempt };
+  const prefix = attempt > 1 ? `X${idx}-retry` : `X${idx}`;
+  console.log(`🔎 explore${attempt > 1 ? ' (retry)' : ''}: ${seed}`);
   try {
     await withChat(null, async (chat) => {
-      const { turn } = recorder(`X${idx}`, chat, path.turns);
+      const { turn } = recorder(prefix, chat, path.turns);
       let reply = await turn(seed);
       const transcript = [{ role: 'user', text: seed }, { role: 'bot', text: reply.text }];
       for (let d = 1; d < Number(a.depth); d += 1) {
@@ -148,9 +160,10 @@ async function explorePath(seed, idx, tried, cfg) {
         reply = await turn(move.say ?? { click: move.click });
         transcript.push({ role: 'user', text: move.label }, { role: 'bot', text: reply.text });
       }
-    });
+    }, { errorShot: `${prefix}-error-state.png` });
   } catch (e) {
     path.error = e.message.split('\n')[0];
+    if (e.shot) path.errorShot = e.shot;
   }
   return path;
 }
@@ -180,6 +193,14 @@ if (a.explore) {
   const seeds = a.seeds ? a.seeds.split('|').map((s) => s.trim()).filter(Boolean) : DEFAULT_SEEDS;
   const tried = new Set();
   const paths = await pool(seeds.map((s, i) => [s, i]), Number(a.parallel), ([s, i]) => explorePath(s, i, tried, cfg));
+  // Failures under parallel load are often transient: retry each failed path
+  // once, sequentially, with the same seed.
+  for (let i = 0; i < paths.length; i += 1) {
+    if (needsRetry(paths[i])) {
+      console.log(`↻ retrying: ${paths[i].seed} (${paths[i].error || 'no turns'})`);
+      paths[i] = mergeRetry(paths[i], await explorePath(paths[i].seed, i, tried, cfg, 2));
+    }
+  }
   const coverage = {};
   paths.forEach((p) => p.turns.forEach((t, ti) => (t.reply?.kinds || []).forEach((k) => {
     (coverage[k] ||= []).push({ path: `${p.seed} → ${p.turns.slice(1, ti + 1).map((x) => x.label).join(' → ')}`.replace(/ → $/, '') });

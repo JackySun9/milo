@@ -69,3 +69,25 @@ export async function personaMove(cfg, transcript, reply) {
   if (move.action === 'say' && move.text) return { say: move.text, label: move.text };
   return null;
 }
+
+// A path is retried once when it errored or captured no turns (e.g. the page
+// or chat entry point timed out under parallel load).
+export function needsRetry(path) {
+  return !!path.error || !(path.turns || []).length;
+}
+
+// Keep the retry only when it captured turns and did at least as well as the
+// original; otherwise keep the original and record why the retry did not help.
+export function mergeRetry(original, retry) {
+  const origTurns = (original.turns || []).length;
+  const retryTurns = (retry.turns || []).length;
+  if (retryTurns && (!retry.error || retryTurns >= origTurns)) {
+    return { ...retry, retried: true, firstError: original.error || null };
+  }
+  return {
+    ...original,
+    retried: true,
+    retryError: retry.error || null,
+    errorShot: retry.errorShot || original.errorShot || null,
+  };
+}
