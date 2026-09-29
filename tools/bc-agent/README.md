@@ -4,7 +4,7 @@ Drives the Brand Concierge (BC) chat the way a person would, then writes an HTML
 
 BC replies come from an AI, so the exact wording changes from run to run. The checks look at **which widget or workflow rendered** instead: product card, citations, table, Firefly gallery, image generation, meeting form, calendar, advisor handoff, SUSI sign-in, or a friendly error. They do not compare exact text.
 
-This tool is self-contained (its own `package.json`/`package-lock.json`, independent of the Milo root install) so it can be `npm ci`'d on its own in CI. It is invoked from `.github/workflows/brand-concierge-agent.yml`, which runs the standard business-stage workflow below on the same self-hosted Mac mini pool as screenshot-diff and uploads `reports/run/` (report.html/json, workflow-summary, screenshots) as a GitHub Actions artifact. No secrets are required for that non-LLM flow.
+This tool is self-contained (its own `package.json`/`package-lock.json`, independent of the Milo root install) so it can be `npm ci`'d on its own in CI. It is invoked from `.github/workflows/brand-concierge-agent.yml`, which runs the standard business-stage workflow below on the same self-hosted Mac mini pool as screenshot-diff, publishes the run to S3 (see "Publishing to S3") and also uploads `reports/run/` as the GitHub Actions artifact `bc-agent-<run_id>`. The only secrets used are the Screenshot Diff S3 keys.
 
 ## Setup
 
@@ -77,7 +77,36 @@ npm run workflow:business-stage -- \
 ```
 
 `BC_WORKFLOW_URL` and `BC_WORKFLOW_OUT` remain available for CI or scheduled
-runs; command-line values take precedence.
+runs; command-line values take precedence. `BC_RUN_ID` / `BC_RUN_URL` are
+copied into `workflow-summary.json` when set.
+
+Each check in `workflow-summary.json` has `pass`, `status` (`pass` / `review`,
+or `error` when the agent crashed before writing a report) and one evidence
+`screenshot` (a file name next to the summary). `evidence` is `observed` when
+the screenshot shows the widget that proves the check, `fallback` when it is
+the last turn of the seed path meant to reach it, or `none`.
+
+### Publishing to S3
+
+CI publishes each run to the Screenshot Diff bucket (`milo` on
+`s3-sj3.corp.adobe.com`) with `S3_ACCESS_KEY_ID` / `S3_SECRET_ACCESS_KEY`:
+
+```bash
+node publish-s3.mjs --dir reports/run --run-id 12345 --url <tested url> --run-url <GitHub run url>
+```
+
+| Key | Content |
+|---|---|
+| `screenshots/bc-agent/runs/<runId>/workflow-summary.json` / `.md` | Status and checks |
+| `screenshots/bc-agent/runs/<runId>/report.html` / `report.json` | Full transcript |
+| `screenshots/bc-agent/runs/<runId>/<shot>.png` | Every screenshot the report or summary references |
+| `screenshots/bc-agent/runs/index.json` | `[{ runId, status, passed, total, url, startedAt, publishedAt, runUrl, prefix, summary, report }]`, newest first, 50 max |
+| `screenshots/bc-agent/latest.json` | The newest index entry |
+
+nala-auto reads them through `http://nala-auto.corp.adobe.com/api/milo/<key>`.
+Only plain `*.png` names inside the run directory are uploaded (no `..`, `/` or
+symlinks out of it). The index and `latest.json` are written last and only when
+the summary was uploaded. If the agent crashed, an `error` summary is published.
 
 | Flag | Default | Meaning |
 |---|---|---|

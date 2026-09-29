@@ -5,7 +5,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
-import { summarizeBusinessStage, renderWorkflowSummary } from './lib/workflow-summary.js';
+import { summarizeBusinessStage, renderWorkflowSummary, errorSummary } from './lib/workflow-summary.js';
 
 const here = fileURLToPath(new URL('.', import.meta.url));
 const { values: options } = parseArgs({
@@ -31,6 +31,18 @@ if (!/^https?:$/.test(target.protocol)) {
   process.exit(2);
 }
 mkdirSync(outDir, { recursive: true });
+const startedAt = new Date().toISOString();
+
+function writeSummary(result, report) {
+  const summary = {
+    ...result,
+    runId: process.env.BC_RUN_ID || null,
+    runUrl: process.env.BC_RUN_URL || null,
+    finishedAt: new Date().toISOString(),
+  };
+  writeFileSync(join(outDir, 'workflow-summary.json'), JSON.stringify(summary, null, 2));
+  writeFileSync(join(outDir, 'workflow-summary.md'), renderWorkflowSummary(summary, report));
+}
 
 const args = [
   join(here, 'run.mjs'),
@@ -58,12 +70,12 @@ try {
   report = JSON.parse(readFileSync(reportFile, 'utf8'));
 } catch {
   console.error(`Workflow did not produce ${reportFile}`);
+  writeSummary(errorSummary({ url: target.href, startedAt, error: `agent exited with code ${exitCode}` }), {});
   process.exit(exitCode || 2);
 }
 
 const summary = summarizeBusinessStage(report);
-writeFileSync(join(outDir, 'workflow-summary.json'), JSON.stringify(summary, null, 2));
-writeFileSync(join(outDir, 'workflow-summary.md'), renderWorkflowSummary(summary, report));
+writeSummary(summary, report);
 
 console.log(`\nWorkflow result: ${summary.status.toUpperCase()} (${summary.passed}/${summary.total})`);
 console.log(summary.conclusion);

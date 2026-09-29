@@ -10,8 +10,14 @@ name: Brand Concierge Agent
 # nala-auto can link back to via the run URL.
 #
 # This is a non-LLM "standard workflow" run (agent explores suggested
-# prompts/CTAs and classifies which widgets rendered) so no API keys or
-# secrets are required.
+# prompts/CTAs and classifies which widgets rendered); the only secrets used
+# are the Screenshot Diff S3 keys for publishing.
+#
+# S3 contract (bucket `milo`, see tools/bc-agent/lib/publish.js):
+#   screenshots/bc-agent/runs/<run_id>/workflow-summary.json|.md, report.html|.json, *.png
+#   screenshots/bc-agent/runs/index.json   (newest first, 50 max)
+#   screenshots/bc-agent/latest.json       (newest run entry)
+# Read via http://nala-auto.corp.adobe.com/api/milo/<key>.
 
 on:
   workflow_dispatch:
@@ -31,6 +37,10 @@ jobs:
     name: brand-concierge-agent
     runs-on: [self-hosted, macOS, screendiff]
     timeout-minutes: 30
+    env:
+      RUN_ID: ${{ inputs.run_id || github.run_id }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      OUT_DIR: ${{ github.workspace }}/tools/bc-agent/reports/run
     defaults:
       run:
         working-directory: tools/bc-agent
@@ -39,12 +49,18 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Validate url
+      - name: Validate inputs
+        env:
+          TARGET_URL: ${{ inputs.url }}
         run: |
-          case "${{ inputs.url }}" in
+          case "$TARGET_URL" in
             http://*|https://*) ;;
-            *) echo "::error::url must be an http(s) URL, got: ${{ inputs.url }}"; exit 1 ;;
+            *) echo "::error::url must be an http(s) URL"; exit 1 ;;
           esac
+          if ! printf '%s' "$RUN_ID" | grep -Eq '^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$' || printf '%s' "$RUN_ID" | grep -q '\.\.'; then
+            echo "::error::run_id may only contain letters, digits, dot, dash, underscore (max 64)"
+            exit 1
+          fi
 
       - name: Setup Node 20
         uses: actions/setup-node@v4
@@ -54,6 +70,7 @@ jobs:
           cache-dependency-path: tools/bc-agent/package-lock.json
 
       - name: Install bc-agent dependencies
+        id: install
         run: npm ci
 
       - name: Install Playwright Chromium
@@ -62,13 +79,25 @@ jobs:
       - name: Run standard business-stage workflow
         env:
           BC_WORKFLOW_URL: ${{ inputs.url }}
-          BC_WORKFLOW_OUT: ${{ github.workspace }}/tools/bc-agent/reports/run
+          BC_WORKFLOW_OUT: ${{ env.OUT_DIR }}
+          BC_RUN_ID: ${{ env.RUN_ID }}
+          BC_RUN_URL: ${{ env.RUN_URL }}
         run: node workflow-business-stage.mjs
+
+      # Runs even when the agent reports REVIEW/fails, so the current status
+      # and whatever screenshots exist still reach nala-auto.
+      - name: Publish status and screenshots to S3
+        if: always() && steps.install.outcome == 'success'
+        env:
+          S3_ACCESS_KEY_ID: ${{ secrets.S3ACCESSKEY }}
+          S3_SECRET_ACCESS_KEY: ${{ secrets.S3SECRETKEY }}
+          TARGET_URL: ${{ inputs.url }}
+        run: node publish-s3.mjs --dir "$OUT_DIR" --run-id "$RUN_ID" --url "$TARGET_URL" --run-url "$RUN_URL"
 
       - name: Set artifact name
         if: always()
         id: artifact
-        run: echo "name=bc-agent-${{ inputs.run_id || github.run_id }}" >> "$GITHUB_OUTPUT"
+        run: echo "name=bc-agent-$RUN_ID" >> "$GITHUB_OUTPUT"
 
       - name: Upload report (HTML, JSON, summary, screenshots)
         if: always()
@@ -85,4 +114,4 @@ jobs:
           if [ -f reports/run/workflow-summary.md ]; then
             cat reports/run/workflow-summary.md
           fi
-          echo "::notice title=View results::Artifact ${{ steps.artifact.outputs.name }} on run ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          echo "::notice title=View results::http://nala-auto.corp.adobe.com/api/milo/screenshots/bc-agent/runs/$RUN_ID/workflow-summary.json (artifact ${{ steps.artifact.outputs.name }} on $RUN_URL)"
