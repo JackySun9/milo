@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Publish a bc-agent run directory to S3 (see lib/publish.js for the key contract).
 //
-//   node publish-s3.mjs --dir reports/run --run-id 12345 [--url <tested url>] [--run-url <gh run url>]
+//   node publish-s3.mjs --dir reports/run --run-id 12345 [--url <tested url>] [--run-url <gh run url>] [--suite monitor|explore]
 //
 // Credentials: S3_ACCESS_KEY_ID / S3_SECRET_ACCESS_KEY (same as screenshot-diff).
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
@@ -9,6 +9,8 @@ import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { makeS3Client, publishRun, s3Config } from './lib/publish.js';
 import { errorSummary, renderWorkflowSummary } from './lib/workflow-summary.js';
+import { monitorErrorSummary } from './lib/monitor.js';
+import { renderMonitorSummary } from './lib/monitor-report.js';
 
 const { values: a } = parseArgs({
   options: {
@@ -16,6 +18,7 @@ const { values: a } = parseArgs({
     'run-id': { type: 'string' },
     url: { type: 'string' },
     'run-url': { type: 'string' },
+    suite: { type: 'string', default: 'explore' },
   },
 });
 
@@ -26,9 +29,11 @@ try {
   // The agent may have crashed before summarising; publish an error status
   // so nala-auto does not show a stale or missing run.
   if (!existsSync(join(dir, 'workflow-summary.json'))) {
-    const summary = errorSummary({ url: a.url || null, startedAt: null, error: 'no workflow summary was written' });
+    const args = { url: a.url || null, startedAt: null, error: 'no workflow summary was written' };
+    const monitor = a.suite === 'monitor';
+    const summary = monitor ? monitorErrorSummary(args) : errorSummary(args);
     writeFileSync(join(dir, 'workflow-summary.json'), JSON.stringify(summary, null, 2));
-    writeFileSync(join(dir, 'workflow-summary.md'), renderWorkflowSummary(summary));
+    writeFileSync(join(dir, 'workflow-summary.md'), monitor ? renderMonitorSummary(summary) : renderWorkflowSummary(summary));
   }
   const cfg = s3Config();
   const store = await makeS3Client(cfg);

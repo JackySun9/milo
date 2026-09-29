@@ -21,7 +21,10 @@ export class BcChat {
 
   async open(url) {
     await this.page.goto(url, { waitUntil: 'domcontentloaded' });
-    await this.page.waitForSelector(`${ENTRY_INPUTS}, ${FLOATING_BUTTONS}, .chat-input`, { timeout: 30000 });
+    // Wait for any *visible* entry point; the first DOM match is often a
+    // hidden duplicate (e.g. the gnav input on mobile breakpoints).
+    await this.page.locator(`${ENTRY_INPUTS}, ${FLOATING_BUTTONS}, .chat-input`)
+      .filter({ visible: true }).first().waitFor({ timeout: 45000 });
     await this.page.waitForTimeout(1500);
   }
 

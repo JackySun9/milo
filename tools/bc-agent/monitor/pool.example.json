@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "source": "Public example pool. The real pool is private: pass --pool, set BC_MONITOR_POOL, or keep a gitignored monitor/pool.json.",
+  "checks": {
+    "paa-product": [{ "id": "ex-paa-1", "prompt": "What is Acrobat?" }],
+    "paa-compare": [{ "id": "ex-cmp-1", "prompt": "Compare Photoshop and Lightroom" }],
+    "pricing": [{ "id": "ex-price-1", "prompt": "How much does Photoshop cost?" }],
+    "acrobat-cta": [{ "id": "ex-cta-1", "prompt": "Edit a PDF", "verb": "edit", "expectUrl": "https://www.adobe.com/acrobat/online/pdf-editor.html" }],
+    "genie": [{ "id": "ex-genie-1", "prompt": "how to remove background from image photoshop" }],
+    "firefly-generate": [{ "id": "ex-ffgen-1", "prompt": "Generate an image of a cat" }],
+    "firefly-boards": [{ "id": "ex-boards-1", "prompt": "fashion moodboard" }],
+    "firefly-edit": [{ "id": "ex-edit-1", "prompt": "remove a person from a photo with FF" }],
+    "bam-explicit": [{ "id": "ex-bam-1", "prompt": "I'd like to book a meeting with Adobe to discuss purchasing Workfront for my team" }],
+    "bam-implicit": [{ "id": "ex-bami-1", "prompt": "need help buying adobe analytics enterprise plan" }],
+    "bam-clarify": [{ "id": "ex-clar-1", "prompt": "Talk to an agent", "followUp": "Adobe Experience Platform" }],
+    "live-chat": [{ "id": "ex-live-1", "prompt": "need bulk licenses for photoshop pls connect me to agent" }],
+    "support-deflect": [{ "id": "ex-sup-1", "prompt": "my billing failed, connect me to an agent" }],
+    "out-of-scope": [{ "id": "ex-oos-1", "prompt": "What's the weather in Paris tomorrow?" }]
+  }
+}

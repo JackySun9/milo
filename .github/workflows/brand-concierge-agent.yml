@@ -9,9 +9,16 @@ name: Brand Concierge Agent
 # work, and results are published as a GitHub Actions artifact that
 # nala-auto can link back to via the run URL.
 #
-# This is a non-LLM "standard workflow" run (agent explores suggested
-# prompts/CTAs and classifies which widgets rendered); the only secrets used
-# are the Screenshot Diff S3 keys for publishing.
+# Suites (non-LLM; replies are classified by rendered widgets):
+#   monitor (default) - one short conversation per BC agent/route (Product
+#     Advisor, pricing, Acrobat CTA, Genie, Firefly, Book a Meeting, Live
+#     Agent, guardrails). Prompts rotate through a PRIVATE pool from the
+#     BC_MONITOR_POOL secret (JSON or base64 JSON); without it the public
+#     example pool is used. Because this repository is public, the monitor
+#     never prints prompts to the log and does not upload a GitHub artifact;
+#     the full report goes to internal S3 only.
+#   explore - the original explorer-based 6-check workflow.
+# Secrets: S3ACCESSKEY / S3SECRETKEY (publishing), BC_MONITOR_POOL (monitor).
 #
 # S3 contract (bucket `milo`, see tools/bc-agent/lib/publish.js):
 #   screenshots/bc-agent/runs/<run_id>/workflow-summary.json|.md, report.html|.json, *.png
@@ -31,6 +38,14 @@ on:
         required: true
         default: 'https://business.stage.adobe.com/?milolibs=stage'
         type: string
+      suite:
+        description: 'monitor = one conversation per BC agent (private prompt pool); explore = original 6-check explorer.'
+        required: false
+        default: 'monitor'
+        type: choice
+        options:
+          - monitor
+          - explore
 
 jobs:
   run-agent:
@@ -40,6 +55,7 @@ jobs:
     env:
       RUN_ID: ${{ inputs.run_id || github.run_id }}
       RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      SUITE: ${{ inputs.suite || 'monitor' }}
       OUT_DIR: ${{ github.workspace }}/tools/bc-agent/reports/run
     defaults:
       run:
@@ -76,13 +92,19 @@ jobs:
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
 
-      - name: Run standard business-stage workflow
+      - name: Run Brand Concierge ${{ env.SUITE }}
         env:
           BC_WORKFLOW_URL: ${{ inputs.url }}
           BC_WORKFLOW_OUT: ${{ env.OUT_DIR }}
           BC_RUN_ID: ${{ env.RUN_ID }}
           BC_RUN_URL: ${{ env.RUN_URL }}
-        run: node workflow-business-stage.mjs
+          BC_MONITOR_POOL: ${{ secrets.BC_MONITOR_POOL }}
+        run: |
+          if [ "$SUITE" = "monitor" ]; then
+            node monitor.mjs
+          else
+            node workflow-business-stage.mjs
+          fi
 
       # Runs even when the agent reports REVIEW/fails, so the current status
       # and whatever screenshots exist still reach nala-auto.
@@ -92,15 +114,17 @@ jobs:
           S3_ACCESS_KEY_ID: ${{ secrets.S3ACCESSKEY }}
           S3_SECRET_ACCESS_KEY: ${{ secrets.S3SECRETKEY }}
           TARGET_URL: ${{ inputs.url }}
-        run: node publish-s3.mjs --dir "$OUT_DIR" --run-id "$RUN_ID" --url "$TARGET_URL" --run-url "$RUN_URL"
+        run: node publish-s3.mjs --dir "$OUT_DIR" --run-id "$RUN_ID" --url "$TARGET_URL" --run-url "$RUN_URL" --suite "$SUITE"
 
       - name: Set artifact name
         if: always()
         id: artifact
         run: echo "name=bc-agent-$RUN_ID" >> "$GITHUB_OUTPUT"
 
+      # Artifacts on a public repository are public; the monitor report holds
+      # private prompts, so it is published to internal S3 only.
       - name: Upload report (HTML, JSON, summary, screenshots)
-        if: always()
+        if: always() && env.SUITE != 'monitor'
         uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.artifact.outputs.name }}
@@ -114,4 +138,4 @@ jobs:
           if [ -f reports/run/workflow-summary.md ]; then
             cat reports/run/workflow-summary.md
           fi
-          echo "::notice title=View results::http://nala-auto.corp.adobe.com/api/milo/screenshots/bc-agent/runs/$RUN_ID/workflow-summary.json (artifact ${{ steps.artifact.outputs.name }} on $RUN_URL)"
+          echo "::notice title=View results::http://nala-auto.corp.adobe.com/bc-agent (report: http://nala-auto.corp.adobe.com/api/milo/screenshots/bc-agent/runs/$RUN_ID/report.html)"

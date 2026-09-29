@@ -1,2 +1,4 @@
 node_modules
 reports
+# Private monitor prompt pool (never commit; use the BC_MONITOR_POOL secret in CI)
+monitor/pool.json

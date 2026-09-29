@@ -30,6 +30,59 @@ node run.mjs --explore --no-scenarios --seeds "I need a CMS for 40 sites|Generat
 
 The report is written to `reports/<host>-<timestamp>/report.html`, next to `report.json` and the screenshots. The process exits with code 1 if any scenario fails or errors.
 
+## Monitor suite (default in CI)
+
+`monitor.mjs` holds one short conversation per Brand Concierge agent or route
+and judges the **routing and rendered widgets**, never the wording. Each run
+picks one prompt per check from a prompt pool, rotating by run id. A check
+that misses is retried once: with the same prompt after an error, or with the
+next prompt after a REVIEW. A pass on the retry is marked `flaky`.
+
+| Group | Check | Passes when |
+| --- | --- | --- |
+| Product Advisor | `paa-product` | product card, cited sources or product links |
+| | `paa-compare` | comparison table |
+| | `pricing` | a price, or a link to plans / pricing (answers a plan-type question once) |
+| | `acrobat-cta` | product card whose button opens the expected Acrobat online tool (pathname match) |
+| Genie | `genie` | Help / Experience League links, sources, or the download page |
+| Firefly | `firefly-generate` | generated image, or the sign-in gate with Firefly Gallery |
+| | `firefly-boards` | link to Firefly Boards / mood board |
+| | `firefly-edit` | link to the Firefly image editor |
+| Book a Meeting | `bam-explicit` | Schedule meeting, then the meeting form opens |
+| | `bam-implicit` | a path to sales (meeting CTA or talk-to-sales) |
+| | `bam-clarify` | asks which product, then offers the meeting |
+| Live Agent | `live-chat` | live advisor mode (business.adobe.com only; always ends the connection) |
+| | `support-deflect` | support links, never a sales advisor |
+| Guardrails | `out-of-scope` | declined with no product widgets |
+| Chat UI | `feedback` | any reply shows thumbs up / down |
+
+```sh
+npm run monitor -- --url 'https://business.stage.adobe.com/?milolibs=stage'
+node monitor.mjs --only pricing,genie --headed --run-key try-2
+```
+
+### Private prompt pool
+
+The prompts are curated from an internal golden set and are **not** stored in
+this public repository. Pool precedence: `--pool <file>` >
+`BC_MONITOR_POOL` (JSON or base64 JSON) > gitignored `monitor/pool.json` >
+the public `monitor/pool.example.json` (the report then shows `pool: example`).
+
+Pool shape: `{ "checks": { "<check id>": [{ "id", "prompt", "source"?, "expectUrl"?, "followUp"? }] } }`.
+`expectUrl` is required for `acrobat-cta`.
+
+In CI, set the secret once (repository admin):
+
+```sh
+gh secret set BC_MONITOR_POOL -R <owner>/milo < monitor/pool.json
+```
+
+Privacy: GitHub logs and artifacts of a public repository are public, so the
+monitor prints only check ids and statuses, `workflow-summary.md` never
+contains prompts or replies, and the workflow skips the artifact upload for the
+monitor suite. Prompts, replies and screenshots are published to the internal
+S3 bucket only (`report.html`, `report.json`, `workflow-summary.json`).
+
 ## Shareable standard workflow: business stage
 
 Use the standard workflow when the goal is a repeatable health check rather

@@ -74,6 +74,10 @@ export function referencedShots(report = {}, summary = {}) {
     addTurns(path.turns);
     if (path.errorShot) names.add(path.errorShot);
   });
+  (report.monitor?.items || []).forEach((item) => (item.attempts || []).forEach((attempt) => {
+    addTurns(attempt.turns);
+    if (attempt.errorShot) names.add(attempt.errorShot);
+  }));
   (summary.checks || []).forEach((check) => check.screenshot && names.add(check.screenshot));
   return [...names];
 }
@@ -117,6 +121,7 @@ export function planUpload(dir, runId) {
 export function indexEntry({ runId, summary, prefix, publishedAt, runUrl }) {
   return {
     runId,
+    suite: summary?.suite || 'explore',
     status: summary?.status || 'error',
     passed: summary?.passed ?? 0,
     total: summary?.total ?? 0,
