@@ -50,6 +50,9 @@ on:
 jobs:
   run-agent:
     name: brand-concierge-agent
+    # Disabled: the live-agent check opened real sales-advisor chats (ICX, 9/29).
+    # Re-enable only by setting the repository variable BC_AGENT_ENABLED=true.
+    if: vars.BC_AGENT_ENABLED == 'true'
     runs-on: [self-hosted, macOS, screendiff]
     timeout-minutes: 30
     env:
