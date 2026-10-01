@@ -5,7 +5,7 @@
 //   node run.mjs --url ... --only M1,M3 --headed
 //   node run.mjs --url ... --explore --no-scenarios --depth 4
 //   node run.mjs --url ... --explore --persona                         # LLM persona (needs BC_AGENT_API_KEY)
-//   node run.mjs --url ... --only M4 --submit-forms                    # stage only
+//   node run.mjs --url ... --only M4 --submit-forms                    # stage only, BC_SUBMIT_FORMS=1
 import { chromium } from 'playwright';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -39,6 +39,12 @@ const url = a.url;
 const host = new URL(url).host;
 if (a['submit-forms'] && !/stage|localhost|aem\.(page|live)/.test(host)) {
   console.error(`Refusing --submit-forms on ${host}: it would create real leads. Use a stage URL.`);
+  process.exit(2);
+}
+// Stage is not isolated: its live chat reached real advisors (ICX, 9/29), so
+// stage leads may reach sales too. Require an explicit opt-in.
+if (a['submit-forms'] && process.env.BC_SUBMIT_FORMS !== '1') {
+  console.error('Refusing --submit-forms: stage leads may reach real sales. Set BC_SUBMIT_FORMS=1 only with the sales ops team\'s agreement.');
   process.exit(2);
 }
 const stamp = new Date().toISOString().replace(/[:.]/g, '-');

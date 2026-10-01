@@ -180,7 +180,7 @@ the summary was uploaded. If the agent crashed, an `error` summary is published.
 | `--seeds` | built-in list | `|`-separated opening prompts for the explorer |
 | `--depth` | 3 | Turns per explorer path |
 | `--persona` | off | Let an LLM write the explorer's next message (see below) |
-| `--submit-forms` | off | M4: fill and submit the meeting form with test data to reach the calendar. **Refused on non-stage hosts** (it would create a real lead) |
+| `--submit-forms` | off | M4: fill and submit the meeting form with test data to reach the calendar. **Refused on non-stage hosts** (it would create a real lead), and also needs `BC_SUBMIT_FORMS=1`: stage leads may reach real sales |
 | `--parallel` | 3 | Concurrent browser contexts |
 | `--timeout` | 90 | Seconds to wait for each reply |
 | `--repeat` | 1 | Run each scenario N times and report a pass rate. AI routing varies, e.g. M1 sometimes recommends Firefly instead of Photoshop |
