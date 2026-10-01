@@ -16,6 +16,8 @@ name: Screenshot Diff (Parallel Matrix)
 # Result URL after completion:
 #   http://nala-auto.corp.adobe.com/imagediff/<site>
 
+run-name: ${{ inputs.run_id && format('Screenshot Diff [{0}]', inputs.run_id) || 'Screenshot Diff (Parallel Matrix)' }}
+
 on:
   workflow_dispatch:
     inputs:

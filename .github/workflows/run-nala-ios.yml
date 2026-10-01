@@ -10,6 +10,8 @@ name: Nala iOS (Simulator) Screenshots
 # Runners must be labeled [self-hosted, macOS, ios-sim] with full Xcode + the
 # requested iOS runtime(s), in a logged-in GUI session.
 
+run-name: ${{ inputs.run_id && format('Nala iOS [{0}]', inputs.run_id) || 'Nala iOS (Simulator) Screenshots' }}
+
 on:
   workflow_dispatch:
     inputs:
@@ -56,6 +58,10 @@ on:
         description: 'Target parallel jobs (~= runner count). Each device x iOS is split into floor(max_parallel / combos) URL shards so one device uses the whole fleet.'
         required: false
         default: '4'
+        type: string
+      run_id:
+        description: 'nala-auto run id, shown in the run name so the console can find this run.'
+        required: false
         type: string
 
 jobs:

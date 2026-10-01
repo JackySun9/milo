@@ -26,6 +26,8 @@ name: Brand Concierge Agent
 #   screenshots/bc-agent/latest.json       (newest run entry)
 # Read via http://nala-auto.corp.adobe.com/api/milo/<key>.
 
+run-name: ${{ inputs.run_id && format('Brand Concierge Agent [{0}]', inputs.run_id) || 'Brand Concierge Agent' }}
+
 on:
   workflow_dispatch:
     inputs:
