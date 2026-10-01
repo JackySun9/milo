@@ -8,6 +8,13 @@ This tool is self-contained (its own `package.json`/`package-lock.json`, indepen
 
 ## Setup
 
+> **Live advisors are real people.** Any check that connects to a live sales
+> advisor (monitor `live-chat`, scenario M3) is skipped unless
+> `BC_LIVE_ADVISOR=1`. The explorer never types or clicks "talk to sales /
+> connect me to a human" moves, and any run that the AI routes to an advisor on
+> its own ends the connection at once. Only enable it with the advisor team's
+> agreement (ideally against a test queue).
+
 ```bash
 cd tools/bc-agent
 npm install          # playwright 1.58 (uses the cached Chromium)
@@ -51,7 +58,7 @@ next prompt after a REVIEW. A pass on the retry is marked `flaky`.
 | Book a Meeting | `bam-explicit` | Schedule meeting, then the meeting form opens |
 | | `bam-implicit` | a path to sales (meeting CTA or talk-to-sales) |
 | | `bam-clarify` | asks which product, then offers the meeting |
-| Live Agent | `live-chat` | live advisor mode (business.adobe.com only; always ends the connection) |
+| Live Agent | `live-chat` | live advisor mode (business.adobe.com only; **off unless `BC_LIVE_ADVISOR=1`**, always ends the connection) |
 | | `support-deflect` | support links, never a sales advisor |
 | Guardrails | `out-of-scope` | declined with no product widgets |
 | Chat UI | `feedback` | any reply shows thumbs up / down |
@@ -184,7 +191,7 @@ the summary was uploaded. If the agent crashed, an `error` summary is published.
 |---|---|
 | M1 | Photo prompt → Photoshop/Lightroom mentioned, Sources, feedback icons, product links return < 400 |
 | M2 | Firefly gallery widget; on stage, no production links |
-| M3 | Sales request, then a follow-up (and the "talk to a sales agent" suggestion if needed) → advisor mode, placeholder, End connection → back to AI |
+| M3 | (**only with `BC_LIVE_ADVISOR=1`**) Sales request, then a follow-up (and the "talk to a sales agent" suggestion if needed) → advisor mode, placeholder, End connection → back to AI |
 | M4 | Answers clarifying questions and clicks Schedule meeting → form, subtitle, 2-per-row / 1-per-row layout, submit label. With `--submit-forms`: calendar |
 | M5 | Logged out: image generation → Sign in → SUSI modal title, providers, stage identity host, Close keeps the chat and its history |
 | M7 | Compare prompt → table, both products covered, fits or scrolls |

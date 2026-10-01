@@ -176,6 +176,9 @@ export const CHECKS = [
     name: 'Live advisor handoff',
     flow: 'live',
     appliesTo: isBacom,
+    // Opens a real conversation in the sales advisors' queue, so it is off
+    // unless explicitly enabled (see planRun allowLiveAdvisor).
+    reachesHumans: true,
     expected: 'On business.adobe.com, a request to buy at scale connects to a live advisor.',
     judge(turns) {
       const i = anyTurn(turns, (t) => (t.chat?.kinds || []).includes('advisor'));
@@ -256,10 +259,13 @@ export function loadPool({ file, env = process.env, privateFile, exampleFile }) 
   return { pool: parsePool(readFileSync(exampleFile, 'utf8')), source: 'example' };
 }
 
-export function planRun({ pool, runKey, url, only }) {
+export const LIVE_ADVISOR_OFF = 'Off: this check reaches a real sales advisor (set BC_LIVE_ADVISOR=1 to run it)';
+
+export function planRun({ pool, runKey, url, only, allowLiveAdvisor = false }) {
   return CHECKS.filter((c) => !only || only.includes(c.id)).map((check) => {
     const entries = pool.checks[check.id] || [];
     if (check.appliesTo && !check.appliesTo(url)) return { checkId: check.id, skip: 'Not expected on this site' };
+    if (check.reachesHumans && !allowLiveAdvisor) return { checkId: check.id, skip: LIVE_ADVISOR_OFF };
     if (!entries.length) return { checkId: check.id, skip: 'No prompts in the monitor pool' };
     return { checkId: check.id, entries, index: pickIndex(runKey, check.id, entries.length) };
   });

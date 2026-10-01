@@ -13,7 +13,7 @@ import { parseArgs } from 'node:util';
 import { BcChat } from './lib/chat.js';
 import { SCENARIOS, MANUAL_ONLY } from './scenarios.js';
 import {
-  DEFAULT_SEEDS, nextMoves, personaConfig, personaMove, needsRetry, mergeRetry,
+  DEFAULT_SEEDS, nextMoves, liveAdvisorAllowed, personaConfig, personaMove, needsRetry, mergeRetry,
 } from './lib/explore.js';
 import { renderReport } from './lib/report.js';
 
@@ -98,6 +98,14 @@ function recorder(prefix, chat, turns) {
       entry.reply = await chat.snapshotReply().catch(() => null);
     }
     entry.shot = await shot(label).catch(() => null);
+    // Safety net: if the AI routed to a live advisor on its own, end the
+    // connection at once so no human is kept waiting on a synthetic visitor.
+    if (!liveAdvisorAllowed()) {
+      const state = await chat.chatState().catch(() => null);
+      if (state?.kinds?.includes('advisor')) {
+        entry.endedAdvisor = await chat.click(/end connection/i, { expectReply: false }).then(() => true).catch(() => false);
+      }
+    }
     if (!entry.reply) throw new Error(entry.error || 'no reply');
     return entry.reply;
   };
@@ -172,7 +180,11 @@ const report = { url, startedAt: new Date(t0).toISOString(), scenarios: [], manu
 
 if (!a['no-scenarios']) {
   const only = a.only ? a.only.split(',').map((s) => s.trim().toUpperCase()) : null;
-  const picked = SCENARIOS.filter((s) => !only || only.includes(s.id));
+  const liveOk = liveAdvisorAllowed();
+  const selected = SCENARIOS.filter((s) => !only || only.includes(s.id));
+  const picked = selected.filter((s) => liveOk || !s.liveAdvisor);
+  const liveSkipped = selected.filter((s) => !liveOk && s.liveAdvisor)
+    .map((s) => ({ id: s.id, title: s.title, reason: 'reaches a real sales advisor; run with BC_LIVE_ADVISOR=1 only with the advisor team\'s agreement' }));
   const repeat = Math.max(1, Number(a.repeat) || 1);
   // AI routing is non-deterministic: --repeat N runs each scenario N times.
   const runs = picked.flatMap((s) => Array.from({ length: repeat }, (_, i) => (
@@ -184,7 +196,7 @@ if (!a['no-scenarios']) {
       return { id: s.id, title: s.title, pass: mine.filter((r) => r.status === 'pass' || r.status === 'warn').length, runs: mine.length };
     });
   }
-  report.manual = MANUAL_ONLY.filter((m) => !only || only.includes(m.id));
+  report.manual = [...liveSkipped, ...MANUAL_ONLY.filter((m) => !only || only.includes(m.id))];
 }
 
 if (a.explore) {

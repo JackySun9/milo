@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-  CHECKS, pickIndex, loadPool, planRun, retryIndex, judgeAttempt, summarizeMonitor, monitorErrorSummary, isBacom,
+  CHECKS, pickIndex, loadPool, planRun, retryIndex, judgeAttempt, summarizeMonitor, monitorErrorSummary, isBacom, LIVE_ADVISOR_OFF,
 } from '../lib/monitor.js';
 import { renderMonitorSummary } from '../lib/monitor-report.js';
 import { referencedShots, indexEntry } from '../lib/publish.js';
@@ -48,8 +48,10 @@ test('loadPool precedence: file > secret (json/base64) > private > example', () 
 test('planRun skips live chat off BACOM and checks without prompts', () => {
   assert.ok(isBacom('https://business.stage.adobe.com/?milolibs=stage'));
   assert.ok(!isBacom('https://www.adobe.com/'));
-  const bacom = planRun({ pool: example, runKey: 'r', url: 'https://business.adobe.com/' });
+  const bacom = planRun({ pool: example, runKey: 'r', url: 'https://business.adobe.com/', allowLiveAdvisor: true });
   assert.ok(!bacom.find((i) => i.checkId === 'live-chat').skip);
+  const byDefault = planRun({ pool: example, runKey: 'r', url: 'https://business.adobe.com/' });
+  assert.equal(byDefault.find((i) => i.checkId === 'live-chat').skip, LIVE_ADVISOR_OFF);
   const dotcom = planRun({ pool: example, runKey: 'r', url: 'https://www.adobe.com/' });
   assert.ok(dotcom.find((i) => i.checkId === 'live-chat').skip);
   const partial = planRun({ pool: { checks: { genie: example.checks.genie } }, runKey: 'r', url: 'https://business.adobe.com/', only: ['genie', 'pricing'] });

@@ -54,6 +54,9 @@ export const SCENARIOS = [
   {
     id: 'M3',
     title: 'Advisor connection (sales handoff)',
+    // Opens a real conversation in the sales advisors' queue: only runs with
+    // BC_LIVE_ADVISOR=1 (otherwise listed as manual).
+    liveAdvisor: true,
     async run({ turn, check, chat }) {
       await turn('I want to talk to sales about Firefly Services');
       await turn('I want to know more about pricing');

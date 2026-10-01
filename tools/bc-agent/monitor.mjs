@@ -162,7 +162,7 @@ try {
   });
   if (source === 'example') console.warn('⚠ Using the public example pool; set BC_MONITOR_POOL or --pool for the real monitor prompts.');
   const only = a.only ? a.only.split(',').map((s) => s.trim()) : null;
-  const items = planRun({ pool: promptPool, runKey, url, only });
+  const items = planRun({ pool: promptPool, runKey, url, only, allowLiveAdvisor: process.env.BC_LIVE_ADVISOR === '1' });
   report.monitor = { poolSource: source, items };
   const browser = await chromium.launch({ headless: !a.headed });
   await pool(items.filter((item) => !item.skip), Number(a.parallel) || 2, async (item) => {

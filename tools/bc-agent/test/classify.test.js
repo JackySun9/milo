@@ -58,7 +58,12 @@ test('explorer prefers meeting/sales moves and skips tried or navigational ones'
     buttons: ['Thumbs up for x', 'Learn more', 'Sources', 'Schedule meeting', 'Sign in'],
   };
   const tried = new Set(['what factors determine pricing?']);
-  assert.deepEqual(nextMoves(reply, tried).map((m) => m.label), ['Schedule meeting', 'Can I talk to a sales agent?']);
+  assert.deepEqual(nextMoves(reply, tried, { allowAdvisor: true }).map((m) => m.label), ['Schedule meeting', 'Can I talk to a sales agent?']);
+});
+
+test('explorer never offers live-advisor moves by default', () => {
+  const reply = { suggestions: ['Can I talk to a sales agent?', 'Connect me with an advisor', 'Compare plans'], buttons: ['Schedule meeting'] };
+  assert.deepEqual(nextMoves(reply, new Set()).map((m) => m.label), ['Schedule meeting', 'Compare plans']);
 });
 
 test('business-stage workflow accepts current product behavior', () => {

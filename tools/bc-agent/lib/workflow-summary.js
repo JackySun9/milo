@@ -33,7 +33,7 @@ const CHECKS = [
     name: 'Sales and meeting flow',
     pass: (c) => reached(c, 'meeting-cta') && reached(c, 'form'),
     evidence: [['form'], ['meeting-cta']],
-    seed: /sales/i,
+    seed: /sales|demo/i,
     expected: 'Sales intent may go directly to Schedule meeting and the contact form; live advisor mode is not required.',
   },
   {
