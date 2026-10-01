@@ -8,7 +8,7 @@ on:
 
 jobs:
   clear-stage-cache:
-    if: github.ref == 'refs/heads/stage'
+    if: github.ref == 'refs/heads/stage' && github.repository_owner == 'adobecom'
     uses: ./.github/workflows/clear-cache.yml
     with:
       cpCode: 1318533
@@ -17,7 +17,7 @@ jobs:
     secrets: inherit
 
   clear-prod-cache:
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' && github.repository_owner == 'adobecom'
     uses: ./.github/workflows/clear-cache.yml
     with:
       cpCode: 1318762

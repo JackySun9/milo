@@ -18,6 +18,8 @@ on:
 
 jobs:
   build:
+    # Only upstream: on forks this hits production (milo.adobe.com).
+    if: github.repository_owner == 'adobecom'
     runs-on: ubuntu-latest
     steps:
       - name: Generate a token

@@ -17,6 +17,8 @@ permissions:
 
 jobs:
   run-nala-tests:
+    # Only upstream: on forks this hits production (milo.adobe.com).
+    if: github.repository_owner == 'adobecom'
     name: ${{ matrix.project == 'mas' && 'Running MAS (all browsers)' || matrix.project == 'mep' && 'Running MEP (all browsers)' || format('Running MILO ({0} browser)', matrix.browser) }}
     runs-on: ubuntu-latest
     timeout-minutes: 18
