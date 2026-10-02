@@ -48,9 +48,9 @@ jobs:
       - name: Join the swarm until the hub has no work
         working-directory: ${{ env.URIM_DIR }}
         run: |
-          model=()
-          if [ -n "${{ vars.URIM_RADAR_MODEL }}" ]; then model=(--model "${{ vars.URIM_RADAR_MODEL }}"); fi
+          model=() brain=(--offline)
+          if [ -n "${{ vars.URIM_RADAR_MODEL }}" ]; then model=(--model "${{ vars.URIM_RADAR_MODEL }}") brain=(); fi
           "$URIM_DIR/urim" "${model[@]}" radar worker \
             --hub "${{ vars.URIM_RADAR_HUB }}" \
             --name "${RUNNER_NAME}-${{ matrix.slot }}" \
-            --drain
+            --drain "${brain[@]}"
