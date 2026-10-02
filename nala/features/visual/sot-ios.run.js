@@ -220,7 +220,7 @@ async function main() {
   try {
     for (const [key, value] of entries) {
       const urlA = typeof value === 'string' ? value : value.a;
-      const urlB = typeof value === 'string' ? appendQuery(value, milolibs) : value.b;
+      const urlB = typeof value === 'string' ? appendQuery(value, milolibs) : (value.b || appendQuery(value.a, milolibs));
       const name = `${key}-${vp}`;
       const aPath = `${folderPath}/${name}-a.png`;
       const bPath = `${folderPath}/${name}-b.png`;

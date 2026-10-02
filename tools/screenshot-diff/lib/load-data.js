@@ -10,10 +10,13 @@
  * runner is unchanged downstream:
  *   { __config__?: { waitStrategy }, '<key>': '<url>' | { a, b }, ... }
  *
- * Sheet columns (case-insensitive headers): key | a | b | waitStrategy
+ * Sheet columns (case-insensitive headers): key | a | b | waitStrategy | mask | ignore
  *   - milolibs mode : key + a           (b blank)      -> value is the `a` string
  *   - explicit pair : key + a + b                      -> value is { a, b }
  *   - site config   : key '__config__' + waitStrategy  -> { __config__: { waitStrategy } }
+ *   - page options  : waitStrategy and/or mask on a page row -> { a, b?, waitStrategy?, mask? }
+ *                     (mask = CSS selectors split by newline or `;`, painted over in A and B)
+ *   - ignore        : yes / true / x / 1 -> row skipped (temporarily flaky page)
  */
 const https = require('https');
 const fs = require('fs');
@@ -72,6 +75,17 @@ function col(row, name) {
   return value === null || value === undefined ? '' : String(value).trim();
 }
 
+// Sheet "ignore" column: any of yes / y / true / x / 1 skips the row.
+function isTruthy(value) {
+  return /^(y|yes|true|x|1)$/i.test(value || '');
+}
+
+// Sheet "mask" column: CSS selectors separated by newlines or `;`
+// (commas are valid inside a selector list, so they are not split).
+function splitSelectors(value) {
+  return String(value || '').split(/[\n;]+/).map((s) => s.trim()).filter(Boolean);
+}
+
 // Convert sheet rows to the object shape produced by `yaml.load(sot.<site>.yml)`.
 function rowsToSiteData(rows) {
   const out = {};
@@ -85,9 +99,21 @@ function rowsToSiteData(rows) {
       out[key] = cfg;
       return;
     }
+    if (isTruthy(col(row, 'ignore'))) return;
     const a = col(row, 'a') || col(row, 'url');
     const b = col(row, 'b');
-    if (a || b) out[key] = b ? { a, b } : a;
+    if (!a && !b) return;
+    const waitStrategy = col(row, 'waitstrategy');
+    const mask = splitSelectors(col(row, 'mask'));
+    if (!waitStrategy && !mask.length) {
+      out[key] = b ? { a, b } : a;
+      return;
+    }
+    const entry = { a };
+    if (b) entry.b = b;
+    if (waitStrategy) entry.waitStrategy = waitStrategy;
+    if (mask.length) entry.mask = mask;
+    out[key] = entry;
   });
   return out;
 }

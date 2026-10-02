@@ -137,22 +137,30 @@ async function captureViewport(viewportName, urls, folderPath, milolibs, waitStr
 
   const results = {};
   for (const [key, value] of Object.entries(urls)) {
-    // Two yaml formats:
+    // Sheet/yaml entry formats:
     //   1. `key: 'https://url'`           → milolibs mode (A = url, B = url + MILO_LIBS)
     //   2. `key: { a: 'https://...', b: 'https://...' }` → explicit pair mode
     //      (e.g. graybox: aem.reviews preview vs business-graybox publish)
-    const urlA = typeof value === 'string' ? value : value.a;
-    const urlB = typeof value === 'string' ? appendQuery(value, milolibs) : value.b;
+    //   3. `{ a, b?, waitStrategy?, mask? }` → per-page options from the sheet;
+    //      b blank keeps milolibs mode.
+    const entry = typeof value === 'string' ? { a: value } : value;
+    const urlA = entry.a;
+    const urlB = entry.b || appendQuery(entry.a, milolibs);
+    const pageWait = entry.waitStrategy || waitStrategy;
     const name = `${key}-${viewportName}`;
-    console.log(`  [${name}] ${urlA}  vs  ${urlB}`);
+    console.log(`  [${name}] ${urlA}  vs  ${urlB}${entry.waitStrategy ? `  · wait: ${pageWait}` : ''}${entry.mask ? `  · mask: ${entry.mask.join(' ; ')}` : ''}`);
     try {
       await resetState(); // before A's goto
+      // Masked regions (rotating promos, marketo forms, geo banners) are
+      // painted over identically in A and B so they never count as a diff.
+      const shotOpts = { fullPage: true };
+      if (entry.mask?.length) shotOpts.mask = entry.mask.map((sel) => page.locator(sel));
       const result = await takeTwo(
         page,
-        urlA, () => waitForPageReady(page, waitStrategy),
-        urlB, () => waitForPageReady(page, waitStrategy),
+        urlA, () => waitForPageReady(page, pageWait),
+        urlB, () => waitForPageReady(page, pageWait),
         folderPath, name,
-        { fullPage: true },
+        shotOpts,
         resetState, // beforeBeta hook — reset between A capture and B goto
       );
       results[name] = [result];
