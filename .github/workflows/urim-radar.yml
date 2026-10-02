@@ -1,0 +1,55 @@
+# Dynamic radar swarm on self-hosted Mac mini runners.
+#
+# Copy into the repository the runners are registered to
+# (.github/workflows/urim-radar.yml) and add the `urim` label to the runners
+# that may join the swarm. The hub dispatches this workflow when topics are
+# due (`urim radar serve --hub` with URIM_RADAR_GH_REPO / URIM_RADAR_GH_TOKEN).
+#
+# Secrets:  URIM_RADAR_TOKEN   hub write token
+#           AIFOUNDRY_API_KEY  model key (omit to publish offline digests)
+#           URIM_BIN_URL       prebuilt urim tarball (.../urim-<target>.tar.gz)
+#           SEARXNG_URL        hub search, .../radar-search/<secret-path>
+# Variables: URIM_RADAR_HUB    e.g. https://nala-auto.corp.adobe.com/radar/
+#            URIM_RADAR_MODEL  e.g. aifoundry:<model-id>
+name: urim-radar
+
+on:
+  workflow_dispatch:
+    inputs:
+      topic:
+        description: Topic the hub queued (informational; workers drain the queue)
+        required: false
+        default: ""
+  schedule:
+    - cron: "23 */6 * * *"
+
+run-name: "radar swarm ${{ inputs.topic || 'scheduled' }}"
+
+jobs:
+  swarm:
+    strategy:
+      fail-fast: false
+      matrix:
+        slot: [1, 2, 3]
+    runs-on: [self-hosted, macOS, urim]
+    timeout-minutes: 120
+    env:
+      URIM_RADAR_TOKEN: ${{ secrets.URIM_RADAR_TOKEN }}
+      AIFOUNDRY_API_KEY: ${{ secrets.AIFOUNDRY_API_KEY }}
+      SEARXNG_URL: ${{ secrets.SEARXNG_URL }}
+      URIM_BIN_URL: ${{ secrets.URIM_BIN_URL }}
+      URIM_DIR: ${{ github.workspace }}/../urim-bin-${{ matrix.slot }}
+    steps:
+      - name: Fetch urim
+        run: |
+          mkdir -p "$URIM_DIR"
+          curl -fsSL --retry 3 "$URIM_BIN_URL" | tar -xz -C "$URIM_DIR"
+          "$URIM_DIR/urim" --version
+      - name: Join the swarm until the hub has no work
+        run: |
+          model=()
+          if [ -n "${{ vars.URIM_RADAR_MODEL }}" ]; then model=(--model "${{ vars.URIM_RADAR_MODEL }}"); fi
+          "$URIM_DIR/urim" "${model[@]}" radar worker \
+            --hub "${{ vars.URIM_RADAR_HUB }}" \
+            --name "${RUNNER_NAME}-${{ matrix.slot }}" \
+            --drain
