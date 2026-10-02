@@ -11,6 +11,9 @@
 #           SEARXNG_URL        hub search, .../radar-search/<secret-path>
 # Variables: URIM_RADAR_HUB    e.g. https://nala-auto.corp.adobe.com/radar/
 #            URIM_RADAR_MODEL  e.g. aifoundry:<model-id>
+#            URIM_RADAR_SLOTS  JSON list, one job per entry (spreads over runners),
+#                              e.g. [1,2,3,4,5,6,7,8,9,10,11]; default [1,2,3]
+#            URIM_RADAR_PROCS  urim workers per job (urim is small); default 4
 name: urim-radar
 
 on:
@@ -30,7 +33,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        slot: [1, 2, 3]
+        slot: ${{ fromJSON(vars.URIM_RADAR_SLOTS || '[1,2,3]') }}
     runs-on: [self-hosted, macOS, urim]
     timeout-minutes: 120
     env:
@@ -47,10 +50,20 @@ jobs:
           "$URIM_DIR/urim" --version
       - name: Join the swarm until the hub has no work
         working-directory: ${{ env.URIM_DIR }}
+        env:
+          PROCS: ${{ vars.URIM_RADAR_PROCS || '4' }}
         run: |
           model=() brain=(--offline)
           if [ -n "${{ vars.URIM_RADAR_MODEL }}" ]; then model=(--model "${{ vars.URIM_RADAR_MODEL }}") brain=(); fi
-          "$URIM_DIR/urim" "${model[@]}" radar worker \
-            --hub "${{ vars.URIM_RADAR_HUB }}" \
-            --name "${RUNNER_NAME}-${{ matrix.slot }}" \
-            --drain "${brain[@]}"
+          # Several small workers per job; each drains the hub queue and exits.
+          pids=()
+          for i in $(seq 1 "$PROCS"); do
+            "$URIM_DIR/urim" "${model[@]}" radar worker \
+              --hub "${{ vars.URIM_RADAR_HUB }}" \
+              --name "${RUNNER_NAME}-${{ matrix.slot }}-$i" \
+              --drain "${brain[@]}" 2>&1 | sed "s/^/[w$i] /" &
+            pids+=($!)
+          done
+          rc=0
+          for p in "${pids[@]}"; do wait "$p" || rc=1; done
+          exit $rc
