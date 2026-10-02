@@ -1,0 +1,21 @@
+name: urim-models-probe
+on: workflow_dispatch
+jobs:
+  probe:
+    runs-on: [self-hosted, macOS, urim]
+    env:
+      K: ${{ secrets.AIFOUNDRY_API_KEY }}
+      B: https://apigw.infra.adobe.net/ehl/api/v1
+    steps:
+      - run: |
+          echo "== models"; curl -s -m 30 -H "Authorization: Bearer $K" "$B/models" | python3 -c 'import json,sys
+          t=sys.stdin.read()
+          try:
+            d=json.loads(t); ids=[m.get("id") for m in d.get("data",[])]; print(len(ids)); [print(i) for i in ids if "wen" in i.lower() or "aifoundry" in i.lower()]
+          except Exception: print(t[:500])'
+          for m in "hosted_vllm/Qwen/Qwen3.8_AWS" "aifoundry/Qwen/Qwen-latest" "Qwen/Qwen-latest"; do
+            echo "== $m"; s=$(date +%s)
+            curl -s -m 120 -H "Authorization: Bearer $K" -H 'content-type: application/json' "$B/chat/completions" \
+              -d "{\"model\":\"$m\",\"max_tokens\":200,\"messages\":[{\"role\":\"user\",\"content\":\"In 3 bullets: top 2026 UI design trends.\"}]}" | head -c 900
+            echo; echo "secs=$(( $(date +%s)-s ))"
+          done
