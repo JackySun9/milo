@@ -13,6 +13,11 @@ name: Screenshot Diff (Parallel Matrix)
 # Iphone polls S3 (via nala-auto proxy) for the chrome and ipad shards,
 # then runs lib/merge.js, then uploads the consolidated results.json.
 #
+# shards (1-4) splits the page list further: every viewport runs N jobs,
+# each capturing a contiguous slice (SHARD=k/N in sot.run.js), so a large
+# dataset fans out across idle runners instead of 3 long jobs. iphone shard 1
+# owns the merge and waits for every other capture job.
+#
 # Result URL after completion:
 #   http://nala-auto.corp.adobe.com/imagediff/<site>
 
@@ -67,6 +72,11 @@ on:
         description: 'Figma compare: CSS selector of the web element to compare. Must match exactly one element. Required when figma_url is set.'
         required: false
         type: string
+      shards:
+        description: 'Split each viewport into N parallel jobs (1-4) by slicing the page list'
+        required: false
+        default: '1'
+        type: string
       run_id:
         description: 'Version id for the immutable per-run copy on S3. Defaults to this GitHub run id.'
         required: false
@@ -74,7 +84,7 @@ on:
 
 jobs:
   capture:
-    name: capture-${{ matrix.viewport }}
+    name: capture-${{ matrix.viewport }}${{ strategy.job-total > 3 && format('-{0}', matrix.shard) || '' }}
     if: inputs.figma_url == ''
     env:
       SITE: ${{ inputs.site == 'custom' && inputs.custom_site || inputs.site }}
@@ -87,8 +97,9 @@ jobs:
       fail-fast: false
       matrix:
         viewport: [chrome, ipad, iphone]
+        shard: ${{ fromJSON((inputs.shards == '2' && '[1,2]') || (inputs.shards == '3' && '[1,2,3]') || (inputs.shards == '4' && '[1,2,3,4]') || '[1]') }}
     runs-on: [self-hosted, macOS, screendiff]
-    timeout-minutes: 60
+    timeout-minutes: 90
 
     steps:
       - name: Validate site
@@ -101,6 +112,20 @@ jobs:
             echo "::error::custom_site must be empty unless site=custom"
             exit 1
           fi
+
+      # The viewport list is fixed at 3, so shards = job-total / 3. With one
+      # shard the names stay chrome/ipad/iphone (results-<viewport>.json).
+      - name: Resolve shard
+        env:
+          JOB_TOTAL: ${{ strategy.job-total }}
+          SHARD_IDX: ${{ matrix.shard }}
+          VP: ${{ matrix.viewport }}
+        run: |
+          total=$(( JOB_TOTAL / 3 ))
+          if [ "$total" -gt 1 ]; then name="$VP-$SHARD_IDX"; else name="$VP"; fi
+          echo "SHARD_TOTAL=$total" >> "$GITHUB_ENV"
+          echo "SHARD_NAME=$name" >> "$GITHUB_ENV"
+          echo "Shard $SHARD_IDX/$total → results-$name.json"
 
       - name: Checkout
         uses: actions/checkout@v4
@@ -122,7 +147,7 @@ jobs:
         if: env.VP_ENABLED == 'true'
         env:
           VIEWPORTS: ${{ matrix.viewport }}
-          SHARD_NAME: ${{ matrix.viewport }}
+          SHARD: ${{ matrix.shard }}/${{ env.SHARD_TOTAL }}
           MILO_LIBS: ${{ inputs.milo_libs }}
           URLS: ${{ inputs.urls }}
           S3_ACCESS_KEY_ID: ${{ secrets.S3ACCESSKEY }}
@@ -138,26 +163,27 @@ jobs:
           S3_ACCESS_KEY_ID: ${{ secrets.S3ACCESSKEY }}
           S3_SECRET_ACCESS_KEY: ${{ secrets.S3SECRETKEY }}
           RUN_ID: ${{ inputs.run_id || github.run_id }}
-        run: node tools/screenshot-diff/lib/publish-run.js screenshots/$SITE "$SITE" "$RUN_ID" --images results-${{ matrix.viewport }}.json
+        run: node tools/screenshot-diff/lib/publish-run.js screenshots/$SITE "$SITE" "$RUN_ID" --images results-$SHARD_NAME.json
 
       - name: Upload shard JSON to GH artifacts
         if: always() && env.VP_ENABLED == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: results-${{ env.SITE }}-${{ matrix.viewport }}
-          path: screenshots/${{ env.SITE }}/results-${{ matrix.viewport }}.json
+          name: results-${{ env.SITE }}-${{ env.SHARD_NAME }}
+          path: screenshots/${{ env.SITE }}/results-${{ env.SHARD_NAME }}.json
           retention-days: 7
 
       # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-      # iphone-only: bundle the merge into this job (iphone is the slowest
-      # viewport, so by the time we get here chrome and ipad are usually
-      # already uploaded to S3). No separate merge job → no queue gap.
+      # iphone shard 1 only: bundle the merge into this job (iphone is the
+      # slowest viewport, so by the time we get here the other shards are
+      # usually already uploaded to S3). No separate merge job → no queue gap.
       # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-      - name: Wait for sibling chrome + ipad jobs in THIS run to finish
-        if: matrix.viewport == 'iphone' && success()
+      - name: Wait for every sibling capture job in THIS run to finish
+        if: matrix.viewport == 'iphone' && matrix.shard == 1 && success()
         env:
           GH_TOKEN: ${{ github.token }}
+          SELF: capture-${{ env.SHARD_NAME }}
           API_URL: https://api.github.com/repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/jobs
         run: |
           # Wait on the SIBLING JOBS in this run, not on file presence on
@@ -165,49 +191,54 @@ jobs:
           # pulls last-run data). Use curl + node (node is already on PATH
           # from setup-node; `python3` on bare macOS triggers the Xcode
           # CLT install prompt, while `gh` CLI isn't installed at all).
-          for i in $(seq 1 60); do
+          expected=$(( SHARD_TOTAL * 3 - 1 ))
+          for i in $(seq 1 360); do
             # Tolerate transient GitHub API errors (5xx returns an HTML "Unicorn"
             # page, not JSON). On any curl/parse failure treat as 0-done and retry,
             # so one API hiccup doesn't kill the job under `set -eo pipefail`.
             resp=$(curl -sS -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" "$API_URL" || true)
-            done_count=$(printf '%s' "$resp" | node -e "let d={};try{d=JSON.parse(require('fs').readFileSync(0,'utf8'))}catch(e){}const j=Array.isArray(d.jobs)?d.jobs:[];console.log(j.filter(x=>(x.name.startsWith('capture-chrome')||x.name.startsWith('capture-ipad'))&&x.status==='completed').length)")
-            if [ "$done_count" = "2" ]; then
-              echo "✓ chrome + ipad capture jobs completed"
+            done_count=$(printf '%s' "$resp" | node -e "let d={};try{d=JSON.parse(require('fs').readFileSync(0,'utf8'))}catch(e){}const j=Array.isArray(d.jobs)?d.jobs:[];console.log(j.filter(x=>x.name.startsWith('capture-')&&x.name!==process.env.SELF&&x.status==='completed').length)")
+            if [ "$done_count" = "$expected" ]; then
+              echo "✓ all $expected sibling capture jobs completed"
               break
             fi
-            echo "Waiting (${done_count:-0}/2 sibling jobs done) ..."
+            echo "Waiting (${done_count:-0}/$expected sibling jobs done) ..."
             sleep 10
           done
 
-      - name: Pull fresh chrome + ipad shards from S3
-        if: matrix.viewport == 'iphone' && success()
+      - name: Pull fresh sibling shards from S3
+        if: matrix.viewport == 'iphone' && matrix.shard == 1 && success()
         run: |
           mkdir -p "screenshots/$SITE"
-          for shard in chrome ipad; do
+          for vp in chrome ipad iphone; do
             # Never merge a deselected viewport's shard — whatever is on S3
             # for it is left over from an earlier run.
-            case ",$VIEWPORTS_IN," in *",$shard,"*) ;; *) echo "skip $shard (not selected)"; continue ;; esac
+            case ",$VIEWPORTS_IN," in *",$vp,"*) ;; *) echo "skip $vp (not selected)"; continue ;; esac
+            for k in $(seq 1 "$SHARD_TOTAL"); do
+            if [ "$SHARD_TOTAL" -gt 1 ]; then shard="$vp-$k"; else shard="$vp"; fi
+            [ "$shard" = "$SHARD_NAME" ] && continue
             if curl -sSf -o "screenshots/$SITE/results-$shard.json" \
                  "http://nala-auto.corp.adobe.com/api/milo/screenshots/$SITE/results-$shard.json"; then
               echo "✓ pulled $shard shard"
             else
               echo "::warning::No $shard shard on S3 — merge will proceed without it"
             fi
+            done
           done
 
       - name: Merge shards into results.json
-        if: matrix.viewport == 'iphone' && success()
+        if: matrix.viewport == 'iphone' && matrix.shard == 1 && success()
         run: node tools/screenshot-diff/lib/merge.js screenshots/$SITE
 
       - name: Upload merged results.json to S3
-        if: matrix.viewport == 'iphone' && success()
+        if: matrix.viewport == 'iphone' && matrix.shard == 1 && success()
         env:
           S3_ACCESS_KEY_ID: ${{ secrets.S3ACCESSKEY }}
           S3_SECRET_ACCESS_KEY: ${{ secrets.S3SECRETKEY }}
         run: node tools/screenshot-diff/lib/upload-one.js screenshots/$SITE/results.json
 
       - name: Publish immutable versioned copy of this run
-        if: matrix.viewport == 'iphone' && success()
+        if: matrix.viewport == 'iphone' && matrix.shard == 1 && success()
         env:
           S3_ACCESS_KEY_ID: ${{ secrets.S3ACCESSKEY }}
           S3_SECRET_ACCESS_KEY: ${{ secrets.S3SECRETKEY }}
@@ -215,7 +246,7 @@ jobs:
         run: node tools/screenshot-diff/lib/publish-run.js screenshots/$SITE "$SITE" "$RUN_ID"
 
       - name: Write fresh timestamp + upload
-        if: matrix.viewport == 'iphone' && success()
+        if: matrix.viewport == 'iphone' && matrix.shard == 1 && success()
         env:
           S3_ACCESS_KEY_ID: ${{ secrets.S3ACCESSKEY }}
           S3_SECRET_ACCESS_KEY: ${{ secrets.S3SECRETKEY }}
@@ -224,7 +255,7 @@ jobs:
           node tools/screenshot-diff/lib/upload-one.js screenshots/$SITE/timestamp.json
 
       - name: Print result URL
-        if: matrix.viewport == 'iphone' && success()
+        if: matrix.viewport == 'iphone' && matrix.shard == 1 && success()
         run: |
           echo "::notice title=View results::http://nala-auto.corp.adobe.com/imagediff/$SITE"
 
