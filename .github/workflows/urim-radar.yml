@@ -46,6 +46,7 @@ jobs:
           curl -fsSL --retry 3 "$URIM_BIN_URL" | tar -xz -C "$URIM_DIR"
           "$URIM_DIR/urim" --version
       - name: Join the swarm until the hub has no work
+        working-directory: ${{ env.URIM_DIR }}
         run: |
           model=()
           if [ -n "${{ vars.URIM_RADAR_MODEL }}" ]; then model=(--model "${{ vars.URIM_RADAR_MODEL }}"); fi
